@@ -1,0 +1,210 @@
+/* Model Router settings page — theme-consistent via DSW alias variables. */
+.mr-root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0 24px;
+}
+
+.mr-description {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.mr-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mr-count {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.mr-button {
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  background: var(--dsw-alias-interactive-bg-hover);
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 3px 10px;
+}
+
+.mr-button:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  filter: brightness(1.08);
+}
+
+.mr-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mr-error {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.mr-empty {
+  color: var(--dsw-alias-label-tertiary);
+  padding: 16px 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.mr-models {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mr-card {
+  border: 1px solid var(--dsw-alias-border-inverted);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--dsw-alias-bg-module-platform);
+  transition: opacity 0.12s;
+}
+
+.mr-card-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.mr-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mr-model-name {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.mr-model-id {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+}
+
+.mr-provider-count {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  flex: none;
+}
+
+.mr-drag-hint {
+  margin: 2px 0 6px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.mr-providers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mr-provider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 2px 8px 2px 4px;
+}
+
+.mr-provider-active {
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-color: var(--dsw-alias-border-l3);
+}
+
+.mr-provider-nocred {
+  opacity: 0.55;
+}
+
+.mr-provider-drop {
+  border-color: var(--dsw-alias-border-brand);
+}
+
+.mr-grip {
+  color: var(--dsw-alias-label-caption);
+  cursor: grab;
+  font-size: 12px;
+  line-height: 20px;
+  flex: none;
+  user-select: none;
+}
+
+.mr-grip:active {
+  cursor: grabbing;
+}
+
+.mr-provider-button {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--dsw-alias-label-primary);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  padding: 4px 0;
+}
+
+.mr-provider-button:disabled {
+  cursor: default;
+}
+
+.mr-provider-name {
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.mr-provider-nocred-label {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  flex: none;
+}
+
+.mr-active-badge {
+  flex: none;
+  color: var(--dsw-alias-label-inverted, #fff);
+  background: var(--dsw-alias-border-brand, #4d6bfe);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0 8px;
+}
