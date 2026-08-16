@@ -63,6 +63,7 @@ pnpm typecheck   # server + client 双 tsconfig 类型检查
 ## 已知限制
 
 - 经 router 委派的请求不携带上游 replay 状态（历史消息的 replay 优化被安全剥离，请求会重新生成而非回放）。
+- 重试策略：router 路由级使用正常默认重试策略（`providerRetryPolicy` 返回缺省）；因路由按模型动态解析，暂不转发目标提供商各自的策略。
 - 提供商无凭据的判定依赖其注册的 settings 配置段（`apiKeyEnv` 凭据引用）；无法判定的提供商视为已配置，不灰显。
 - 模型选择器里 provider 分组名为固定英文 `Model Router`；插件自身设置页文案双语。
 
