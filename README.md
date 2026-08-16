@@ -1,6 +1,6 @@
-# @fonlan/dsh-model-router
+# dsh-model-router
 
-**@fonlan/dsh-model-router** 是一个 [DSH](https://github.com/deepseek-ai/dsh) 插件，向 harness 注册一个虚拟模型提供商 `model-router`：它汇聚用户已添加的**所有**提供商及其模型（按 model id 严格归并），并在每次 LLM 请求发出时把请求实时路由到该模型**当前激活**的提供商。配套的独立设置页支持按模型对提供商拖拽排序（供后续自动切换使用）与点击切换当前提供商；切换后全局立即生效——下一次发出的该模型请求即走新提供商。
+**dsh-model-router** 是一个 [DSH](https://github.com/deepseek-ai/dsh) 插件，向 harness 注册一个虚拟模型提供商 `model-router`：它汇聚用户已添加的**所有**提供商及其模型（按 model id 严格归并），并在每次 LLM 请求发出时把请求实时路由到该模型**当前激活**的提供商。配套的独立设置页支持按模型对提供商拖拽排序（供后续自动切换使用）与点击切换当前提供商；切换后全局立即生效——下一次发出的该模型请求即走新提供商。
 
 ## 功能
 
@@ -59,13 +59,6 @@ pnpm typecheck   # server + client 双 tsconfig 类型检查
 
 - 修改服务端后需重启 profile。
 - 客户端改动走 web 端 HMR 链路，`pnpm run dev:web` 同启时生效。
-
-## 已知限制
-
-- 经 router 委派的请求不携带上游 replay 状态（历史消息的 replay 优化被安全剥离，请求会重新生成而非回放）。
-- 重试策略：router 路由级使用正常默认重试策略（`providerRetryPolicy` 返回缺省）；因路由按模型动态解析，暂不转发目标提供商各自的策略。
-- 提供商无凭据的判定依赖其注册的 settings 配置段（`apiKeyEnv` 凭据引用）；无法判定的提供商视为已配置，不灰显。
-- 模型选择器里 provider 分组名为固定英文 `Model Router`；插件自身设置页文案双语。
 
 ## License
 
