@@ -13,7 +13,7 @@ import { makeSettingsSection } from './settings-section'
 import { registerRouteSwitcher } from './route-switcher'
 
 /** Services required before mounting (provided by the client runtime). */
-export const inject = ['slots', 'locale', 'modelDirectories']
+export const inject = ['slots', 'locale', 'modelDirectories', 'sessions']
 
 /** Client plugin body. */
 export function apply(ctx: ClientContext): void {
