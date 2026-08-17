@@ -11,8 +11,8 @@
   height: 28px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 8px;
+  gap: 2px;
+  padding: 0 6px;
   border: none;
   border-radius: 24px;
   color: var(--dsw-alias-label-secondary);
@@ -44,6 +44,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mr-route-trigger-chevron {
+  color: var(--dsw-alias-label-caption);
+  flex: none;
+  transition: transform 0.12s;
+}
+
+.mr-route-trigger[aria-expanded="true"] .mr-route-trigger-chevron {
+  transform: rotate(180deg);
 }
 
 .mr-route-item-copy {
