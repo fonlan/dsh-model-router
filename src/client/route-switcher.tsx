@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import type { ClientContext, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { IconBranchOutline16, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconRightUpOutline16, Menu, type MenuEntry } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import { api, type ModelRouterState, type RouterModelView } from './api'
@@ -213,7 +213,7 @@ export function RouteSwitcher({
           }}
           title={t('routeButtonTitle')}
         >
-          <IconBranchOutline16 size={15} />
+          <IconRightUpOutline16 size={15} />
           <span className="mr-route-trigger-label">{activeName}</span>
         </button>
       )}

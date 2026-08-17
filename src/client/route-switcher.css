@@ -90,13 +90,19 @@
     display: none;
   }
 
-  /* The model seat is the next sibling of the route-switcher wrapper. */
-  .mr-route-anchor + * {
+  /*
+   * The model seat: each slot is wrapped in a display:contents
+   * [data-slot] div, so the ModelSelect root div (the real flex item of the
+   * composer row) is [data-slot="conversation.input.model"] > *. Give it
+   * the remaining row width; the other controls keep fixed sizes.
+   */
+  [data-slot="conversation.input.right"] + [data-slot="conversation.input.model"] > * {
     flex: 1 1 0;
     min-width: 0;
+    max-width: 100%;
   }
 
-  .mr-route-anchor + * [aria-haspopup="menu"] {
+  [data-slot="conversation.input.right"] + [data-slot="conversation.input.model"] [aria-haspopup="menu"] {
     width: 100%;
     max-width: 100%;
   }
