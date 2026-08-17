@@ -5,7 +5,11 @@
  * (settings page rendering).
  *
  * Decided semantics (grilling session, all recommendations accepted):
- * - Strict merge: models are merged across providers by exact model id only.
+ * - Merge: models are merged across providers by model id — by exact id, or
+ *   (when ignoreModelIdPrefix is on) by id with the first `vendor/` segment
+ *   stripped, so `deepseek/deepseek-v4-flash` and `deepseek-v4-flash` are the
+ *   same model. Display always uses the merged (prefix-free) id; each provider
+ *   entry keeps its own raw local id for delegation.
  * - Per-model provider config: an order[] (future auto-failover preference)
  *   plus an independent active provider (what requests actually route to).
  * - First-seen provider order: for a never-configured model the initial
@@ -14,13 +18,18 @@
  *   the first remaining provider automatically.
  * - New providers for a known model: appended at the end of order; active
  *   untouched.
+ * - Prefix-ignore migration: stored config keyed by a now-stripped raw id
+ *   moves to the merged id (unprefixed entry wins when both exist; order is a
+ *   deduped union). Turning the flag off does not migrate back — the split
+ *   models re-initialize from discovery order.
  */
 
 /** One provider's view of one model. */
 export interface ProviderModelInfo {
   /** Provider id the model belongs to. */
   provider: string
-  /** Provider-local model id (== merged model id, strict merge). */
+  /** Provider-local raw model id, exactly as the provider advertises it
+   *  (may carry a `vendor/` prefix; this is the id delegation must use). */
   id: string
   /** Provider-local display name. */
   name: string
@@ -38,14 +47,16 @@ export interface ProviderInfo {
   models: Array<Omit<ProviderModelInfo, 'provider'>>
 }
 
-/** One merged model across all providers (strict id merge). */
+/** One merged model across all providers. */
 export interface MergedModel {
+  /** Merged display id — the raw id with the leading segment stripped when
+   *  prefix-ignore is on, so it is always shown without a vendor prefix. */
   id: string
-  /** Per-provider entries in provider discovery order. */
+  /** Per-provider entries in provider discovery order (raw local ids). */
   providers: ProviderModelInfo[]
 }
 
-/** Router configuration for one model. */
+/** Router configuration for one model (keyed by merged id). */
 export interface RouterModelConfig {
   /** Provider ids in preference order (future auto-failover). */
   order: string[]
@@ -62,20 +73,63 @@ export interface RouterConfigShape {
    * globally; absent/unknown documents normalize to `true`.
    */
   showQuickSwitch: boolean
+  /**
+   * Whether model ids are matched with their leading `vendor/` segment
+   * ignored (settings → 模型路由 → 匹配时忽略模型 ID 前缀), so
+   * `deepseek/deepseek-v4-flash` and `deepseek-v4-flash` merge into one model
+   * displayed as `deepseek-v4-flash`. Absent/unknown documents normalize to
+   * `true`.
+   */
+  ignoreModelIdPrefix: boolean
 }
 
 export const ROUTER_PROVIDER_ID = 'model-router'
 export const ROUTER_SETTINGS_NS = 'model-router'
 
-/** Merge every provider's models into one entry per exact model id. */
-export function mergeModels(providers: readonly ProviderInfo[]): MergedModel[] {
+/**
+ * Strip the first path segment (`vendor/`) from a model id, case-sensitively.
+ * Inert for ids without a prefix: no slash, an empty first segment, or an
+ * empty remainder all return the input unchanged. `a/b/c` becomes `b/c`.
+ */
+export function stripModelIdPrefix(id: string): string {
+  const slash = id.indexOf('/')
+  if (slash <= 0 || slash === id.length - 1) return id
+  return id.slice(slash + 1)
+}
+
+export interface MergeOptions {
+  /** Group by prefix-stripped id instead of the exact raw id. */
+  ignorePrefix?: boolean
+}
+
+/**
+ * Merge every provider's models into one entry per model id. With
+ * `ignorePrefix` the group key is the prefix-stripped id and the merged id is
+ * that stripped id, while each provider entry keeps its raw local id. When a
+ * single provider advertises both a prefixed and the unprefixed raw id for the
+ * same group (a same-provider collision), the unprefixed raw id wins (it is
+ * the canonical form); otherwise the first-seen raw id wins.
+ */
+export function mergeModels(providers: readonly ProviderInfo[], options: MergeOptions = {}): MergedModel[] {
   const byId = new Map<string, MergedModel>()
   for (const provider of providers) {
+    // Choose one raw id per group key for this provider, preferring the
+    // unprefixed one when both exist.
+    const chosen = new Map<string, string>()
     for (const model of provider.models) {
-      let merged = byId.get(model.id)
+      const key = options.ignorePrefix ? stripModelIdPrefix(model.id) : model.id
+      const prev = chosen.get(key)
+      if (prev === undefined || (prev !== key && model.id === key)) {
+        chosen.set(key, model.id)
+      }
+    }
+    for (const model of provider.models) {
+      const key = options.ignorePrefix ? stripModelIdPrefix(model.id) : model.id
+      if (chosen.get(key) !== model.id) continue
+      let merged = byId.get(key)
       if (merged === undefined) {
-        merged = { id: model.id, providers: [] }
-        byId.set(model.id, merged)
+        merged = { id: key, providers: [] }
+        byId.set(key, merged)
       }
       merged.providers.push({
         provider: provider.id,
@@ -178,6 +232,83 @@ export function syncConfig(
   return { models: next, changed }
 }
 
+function sameModels(a: Record<string, RouterModelConfig>, b: Record<string, RouterModelConfig>): boolean {
+  const aKeys = Object.keys(a)
+  const bKeys = Object.keys(b)
+  if (aKeys.length !== bKeys.length) return false
+  for (const key of aKeys) {
+    const x = a[key]
+    const y = b[key]
+    if (y === undefined || x.active !== y.active || x.order.length !== y.order.length) return false
+    if (!x.order.every((id, i) => id === y.order[i])) return false
+  }
+  return true
+}
+
+/**
+ * Reconcile the stored config document against the live merged catalog.
+ *
+ * Beyond the per-model sync of {@link syncConfig}, this remaps stored entries
+ * to their merged ids: with prefix-ignore on, an entry keyed by a raw id that
+ * now strips to a merged id (e.g. `deepseek/deepseek-v4-flash` →
+ * `deepseek-v4-flash`) migrates to that merged id. When several stored keys
+ * collapse onto one merged id, the entry keyed by the merged id itself wins
+ * for `active`, and `order` becomes the deduped union in exact-key-first
+ * order. Stored keys no longer mapping to any merged model are dropped (this
+ * also covers turning the flag off — split models re-initialize fresh).
+ */
+export function reconcileConfig(
+  config: RouterConfigShape,
+  models: readonly MergedModel[],
+): { models: Record<string, RouterModelConfig>; changed: boolean } {
+  // stored key → merged id it belongs to (exact key wins; prefixed raw keys
+  // map to their stripped merged id only while the flag is on)
+  const keyToMerged = new Map<string, string>()
+  for (const model of models) {
+    keyToMerged.set(model.id, model.id)
+    if (!config.ignoreModelIdPrefix) continue
+    for (const provider of model.providers) {
+      if (stripModelIdPrefix(provider.id) === model.id && !keyToMerged.has(provider.id)) {
+        keyToMerged.set(provider.id, model.id)
+      }
+    }
+  }
+
+  const grouped = new Map<string, Array<{ key: string; entry: RouterModelConfig }>>()
+  for (const [key, entry] of Object.entries(config.models)) {
+    const mergedId = keyToMerged.get(key)
+    if (mergedId === undefined) continue // stale: dropped from the next doc
+    const list = grouped.get(mergedId) ?? []
+    list.push({ key, entry })
+    grouped.set(mergedId, list)
+  }
+
+  const next: Record<string, RouterModelConfig> = {}
+  for (const model of models) {
+    const ids = model.providers.map(provider => provider.provider)
+    const list = grouped.get(model.id)
+    let base: RouterModelConfig | undefined
+    if (list !== undefined && list.length > 0) {
+      const exact = list.find(group => group.key === model.id)
+      const ordered = exact === undefined ? list : [exact, ...list.filter(group => group.key !== model.id)]
+      const order: string[] = []
+      for (const group of ordered) {
+        for (const id of group.entry.order) {
+          if (!order.includes(id)) order.push(id)
+        }
+      }
+      base = { order, active: exact?.entry.active ?? ordered[0].entry.active }
+    }
+    const view: RouterConfigShape = { ...config, models: { ...next } }
+    if (base !== undefined) view.models[model.id] = base
+    const result = syncConfig(view, model.id, ids)
+    const entry = result.models[model.id]
+    if (entry !== undefined) next[model.id] = entry
+  }
+
+  return { models: next, changed: !sameModels(next, config.models) }
+}
+
 /** Switch a model's active provider (no-op when already active). */
 export function setActive(
   config: RouterConfigShape,
@@ -222,11 +353,14 @@ export function setOrder(
 /** Shape-validate an unknown value as a RouterConfigShape (lenient). */
 export function normalizeConfig(value: unknown): RouterConfigShape {
   const models: Record<string, RouterModelConfig> = {}
-  if (typeof value !== 'object' || value === null) return { models, showQuickSwitch: true }
-  const root = value as { models?: unknown; showQuickSwitch?: unknown }
+  if (typeof value !== 'object' || value === null) {
+    return { models, showQuickSwitch: true, ignoreModelIdPrefix: true }
+  }
+  const root = value as { models?: unknown; showQuickSwitch?: unknown; ignoreModelIdPrefix?: unknown }
   const showQuickSwitch = root.showQuickSwitch !== false
+  const ignoreModelIdPrefix = root.ignoreModelIdPrefix !== false
   const raw = root.models
-  if (typeof raw !== 'object' || raw === null) return { models, showQuickSwitch }
+  if (typeof raw !== 'object' || raw === null) return { models, showQuickSwitch, ignoreModelIdPrefix }
   for (const [id, entry] of Object.entries(raw as Record<string, unknown>)) {
     if (typeof entry !== 'object' || entry === null) continue
     const e = entry as { order?: unknown; active?: unknown }
@@ -235,5 +369,5 @@ export function normalizeConfig(value: unknown): RouterConfigShape {
     if (active === '') continue
     models[id] = { order, active }
   }
-  return { models, showQuickSwitch }
+  return { models, showQuickSwitch, ignoreModelIdPrefix }
 }

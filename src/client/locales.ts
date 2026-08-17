@@ -29,6 +29,8 @@ export const zh = {
   globalRouteHint: '切换后对所有会话的后续请求生效',
   showQuickSwitchLabel: '在输入栏显示快速路由切换按钮',
   showQuickSwitchDescription: '开启后，当当前模型是 model-router 路由时，在输入框模型选择器右侧显示 provider 快速切换按钮。',
+  ignorePrefixLabel: '匹配时忽略模型 ID 前缀',
+  ignorePrefixDescription: '开启后，deepseek/deepseek-v4-flash 与 deepseek-v4-flash 视为同一模型，统一显示不带前缀的模型 id（默认开启）。',
 }
 
 export const en = {
@@ -56,4 +58,6 @@ export const en = {
   globalRouteHint: 'Changes apply to subsequent requests in all sessions',
   showQuickSwitchLabel: 'Show quick route switcher in the composer',
   showQuickSwitchDescription: 'When enabled, a provider quick-switch button appears next to the model selector when the current model is a model-router route.',
+  ignorePrefixLabel: 'Ignore model ID prefix when matching',
+  ignorePrefixDescription: 'When enabled, deepseek/deepseek-v4-flash and deepseek-v4-flash are treated as the same model and shown without the prefix (on by default).',
 }

@@ -142,6 +142,14 @@ export function registerApiRoutes(ctx: Context, service: ModelRouterService): ()
     return service.state()
   })
 
+  route('set-ignore-model-id-prefix', async (p) => {
+    if (typeof p.value !== 'boolean') {
+      throw new Error('value 必须是布尔值')
+    }
+    await service.setIgnoreModelIdPrefix(p.value)
+    return service.state()
+  })
+
   return () => {
     for (const dispose of disposers) dispose()
   }

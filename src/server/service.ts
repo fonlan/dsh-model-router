@@ -10,12 +10,12 @@ import type { AdapterRegistrationHandle } from '@deepseek-ai/dsh-llm'
 import {
   initialConfigFor,
   normalizeConfig,
+  reconcileConfig,
   ROUTER_PROVIDER_ID,
   ROUTER_SETTINGS_NS,
   resolveActive,
   setActive,
   setOrder,
-  syncConfig,
   type RouterConfigShape,
 } from '../shared/config.js'
 import { buildCatalog, type RouterCatalog } from './catalog.js'
@@ -29,17 +29,20 @@ export const RouterConfigSchema: z<RouterConfigShape> = z.object({
     order: z.array(z.string()),
     active: z.string(),
   })),
-  // Older documents predate the toggle; normalizeConfig defaults to true.
+  // Older documents predate the toggles; normalizeConfig defaults both on.
   // Schemastery object keys are input-optional, so absent is valid here.
   showQuickSwitch: z.boolean(),
+  ignoreModelIdPrefix: z.boolean(),
 })
 
-const EMPTY_CONFIG: RouterConfigShape = { models: {}, showQuickSwitch: true }
+const EMPTY_CONFIG: RouterConfigShape = { models: {}, showQuickSwitch: true, ignoreModelIdPrefix: true }
 
 /** The settings-page state view served by the API. */
 export interface ModelRouterState {
   /** Whether the composer quick route-switcher button is enabled. */
   showQuickSwitch: boolean
+  /** Whether model ids are matched with their leading vendor/ prefix ignored. */
+  ignoreModelIdPrefix: boolean
   providers: Array<{ id: string; name: string; credentialConfigured: boolean }>
   models: Array<{
     id: string
@@ -124,7 +127,7 @@ export class ModelRouterService implements RouterFacts {
   /** Rebuild the catalog (in-flight dedupe; failures keep the last good one). */
   refreshCatalog(): Promise<RouterCatalog> {
     if (this.inflight !== null) return this.inflight
-    this.inflight = buildCatalog(this.ctx)
+    this.inflight = buildCatalog(this.ctx, this.config().ignoreModelIdPrefix)
       .then((catalog) => {
         this.cached = catalog
         return catalog
@@ -139,32 +142,19 @@ export class ModelRouterService implements RouterFacts {
     return this.inflight
   }
 
-  /** Refresh, then persist any config drift (new providers/models, vanish). */
+  /** Refresh, then persist any config drift (migration, new/vanished models). */
   async refreshAndReconcile(): Promise<void> {
     const catalog = await this.refreshCatalog()
     if (this.scope === undefined) return
     const current = this.config()
-    const next = { ...current.models }
-    let changed = false
-    for (const model of catalog.models) {
-      const ids = model.providers.map(provider => provider.provider)
-      const result = syncConfig(current, model.id, ids)
-      if (result.changed) changed = true
-      for (const [id, entry] of Object.entries(result.models)) {
-        if (entry === undefined) delete next[id]
-        else next[id] = entry
-      }
-    }
-    // Drop stored entries whose model no longer exists anywhere.
-    for (const id of Object.keys(next)) {
-      if (!catalog.byId.has(id)) {
-        delete next[id]
-        changed = true
-      }
-    }
+    const { models, changed } = reconcileConfig(current, catalog.models)
     if (!changed) return
     try {
-      await this.scope.replace({ models: next, showQuickSwitch: this.config().showQuickSwitch })
+      await this.scope.replace({
+        models,
+        showQuickSwitch: current.showQuickSwitch,
+        ignoreModelIdPrefix: current.ignoreModelIdPrefix,
+      })
     } catch (error) {
       this.ctx.logger.warn(`model-router: reconcile persist failed: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -187,6 +177,7 @@ export class ModelRouterService implements RouterFacts {
     const creds = catalog.credentialConfigured
     return {
       showQuickSwitch: config.showQuickSwitch,
+      ignoreModelIdPrefix: config.ignoreModelIdPrefix,
       providers: catalog.providers.map(provider => ({
         id: provider.id,
         name: names.get(provider.id) ?? provider.id,
@@ -243,13 +234,42 @@ export class ModelRouterService implements RouterFacts {
     }
     const current = this.config()
     if (current.showQuickSwitch === value) return
-    await this.scope.replace({ models: current.models, showQuickSwitch: value })
+    await this.scope.replace({
+      models: current.models,
+      showQuickSwitch: value,
+      ignoreModelIdPrefix: current.ignoreModelIdPrefix,
+    })
+  }
+
+  /**
+   * Toggle prefix-ignored model matching (global, persisted). Persists the
+   * flag first, then rebuilds the catalog with the new merge rule and
+   * reconciles stored config (migrates prefixed keys to merged ids when
+   * turning on; split models re-initialize when turning off).
+   */
+  async setIgnoreModelIdPrefix(value: boolean): Promise<void> {
+    if (this.scope === undefined) {
+      throw new Error('model-router: settings service is not available in this profile')
+    }
+    const current = this.config()
+    if (current.ignoreModelIdPrefix === value) return
+    await this.scope.replace({
+      models: current.models,
+      showQuickSwitch: current.showQuickSwitch,
+      ignoreModelIdPrefix: value,
+    })
+    await this.refreshAndReconcile()
   }
 
   private async persist(models: Record<string, { order: string[]; active: string }>): Promise<void> {
     if (this.scope === undefined) {
       throw new Error('model-router: settings service is not available in this profile')
     }
-    await this.scope.replace({ models, showQuickSwitch: this.config().showQuickSwitch })
+    const current = this.config()
+    await this.scope.replace({
+      models,
+      showQuickSwitch: current.showQuickSwitch,
+      ignoreModelIdPrefix: current.ignoreModelIdPrefix,
+    })
   }
 }

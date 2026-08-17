@@ -1,9 +1,9 @@
 /**
  * Provider discovery for the router: every registered LLM provider route
- * (minus the router itself) becomes a ProviderInfo, models merge by exact id
- * through the shared core, and per-provider credential status is detected
- * generically through the configurable-provider directory + the credentials
- * seam.
+ * (minus the router itself) becomes a ProviderInfo, models merge through the
+ * shared core (by exact id, or by prefix-stripped id when `ignorePrefix` is
+ * on), and per-provider credential status is detected generically through the
+ * configurable-provider directory + the credentials seam.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef, type CredentialProvider } from '@deepseek-ai/dsh-credentials'
@@ -16,7 +16,7 @@ export interface RouterCatalog {
   providers: ProviderInfo[]
   /** Provider id → human display name (configurable-directory name when known). */
   providerNames: Map<string, string>
-  /** Models merged by exact id across providers. */
+  /** Models merged across providers (exact id, or stripped when flag on). */
   models: MergedModel[]
   /** Model id → merged model. */
   byId: Map<string, MergedModel>
@@ -89,7 +89,7 @@ async function detectCredentialConfigured(
 }
 
 /** Rebuild the live router catalog from the LLM registry. */
-export async function buildCatalog(ctx: Context): Promise<RouterCatalog> {
+export async function buildCatalog(ctx: Context, ignorePrefix = false): Promise<RouterCatalog> {
   const routes = ctx.llm.listProviders().filter(provider => provider.id !== ROUTER_PROVIDER_ID)
   const directory = new Map<string, ConfigurableEntry>(
     ctx.llm.listConfigurableProviders().map(entry => [entry.provider, {
@@ -122,7 +122,7 @@ export async function buildCatalog(ctx: Context): Promise<RouterCatalog> {
     credentialConfigured.set(route.id, await detectCredentialConfigured(ctx, entry))
   }
 
-  const models = mergeModels(providers)
+  const models = mergeModels(providers, { ignorePrefix })
   const byId = new Map(models.map(model => [model.id, model]))
   return { providers, providerNames, models, byId, credentialConfigured }
 }

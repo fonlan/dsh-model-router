@@ -16,6 +16,8 @@ export interface RouterModelView {
 export interface ModelRouterState {
   /** Whether the composer quick route-switcher button is enabled. */
   showQuickSwitch: boolean
+  /** Whether model ids are matched with their leading vendor/ prefix ignored. */
+  ignoreModelIdPrefix: boolean
   providers: RouterProviderView[]
   models: RouterModelView[]
 }
@@ -57,4 +59,6 @@ export const api = {
   refresh: () => call<ModelRouterState>('refresh'),
   setShowQuickSwitch: (value: boolean) =>
     call<ModelRouterState>('set-show-quick-switch', { value }),
+  setIgnoreModelIdPrefix: (value: boolean) =>
+    call<ModelRouterState>('set-ignore-model-id-prefix', { value }),
 }

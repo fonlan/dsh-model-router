@@ -59,6 +59,7 @@ export function makeSettingsSection(ctx: ClientContext): () => JSX.Element {
     const [busyModel, setBusyModel] = useState<string | null>(null)
     const [drag, setDrag] = useState<{ modelId: string; index: number } | null>(null)
     const [quickSwitchBusy, setQuickSwitchBusy] = useState(false)
+    const [ignorePrefixBusy, setIgnorePrefixBusy] = useState(false)
 
     const load = useCallback(async () => {
       setLoading(true)
@@ -127,6 +128,22 @@ export function makeSettingsSection(ctx: ClientContext): () => JSX.Element {
       }
     }, [state])
 
+    const toggleIgnorePrefix = useCallback(async (value: boolean) => {
+      if (state === null) return
+      const previous = state.ignoreModelIdPrefix
+      setState(prev => prev === null ? prev : { ...prev, ignoreModelIdPrefix: value })
+      setIgnorePrefixBusy(true)
+      try {
+        setState(await api.setIgnoreModelIdPrefix(value))
+        setError(null)
+      } catch (cause) {
+        setState(prev => prev === null ? prev : { ...prev, ignoreModelIdPrefix: previous })
+        setError(cause instanceof Error ? cause.message : String(cause))
+      } finally {
+        setIgnorePrefixBusy(false)
+      }
+    }, [state])
+
     const models = useMemo(() => state?.models ?? [], [state])
 
     return (
@@ -142,6 +159,18 @@ export function makeSettingsSection(ctx: ClientContext): () => JSX.Element {
           <span className="mr-quick-switch-copy">
             <span className="mr-quick-switch-label">{t('showQuickSwitchLabel')}</span>
             <span className="mr-quick-switch-desc">{t('showQuickSwitchDescription')}</span>
+          </span>
+        </label>
+        <label className="mr-quick-switch">
+          <input
+            type="checkbox"
+            checked={state?.ignoreModelIdPrefix ?? true}
+            disabled={loading || ignorePrefixBusy}
+            onChange={(event) => void toggleIgnorePrefix(event.target.checked)}
+          />
+          <span className="mr-quick-switch-copy">
+            <span className="mr-quick-switch-label">{t('ignorePrefixLabel')}</span>
+            <span className="mr-quick-switch-desc">{t('ignorePrefixDescription')}</span>
           </span>
         </label>
         <div className="mr-toolbar">
