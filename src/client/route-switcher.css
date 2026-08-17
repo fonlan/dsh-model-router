@@ -89,11 +89,24 @@
   }
 
   .mr-route-trigger {
-    width: 28px;
+    /* The trigger now carries globe + chevron, so let it size naturally
+       instead of forcing a 28px circle that could overflow the row. */
     height: 28px;
-    padding: 0;
+    padding: 4px 6px;
     justify-content: center;
     border-radius: 999px;
+  }
+
+  /*
+   * Make the composer's trailing group (the parent of our [data-slot] right
+   * wrapper) shrinkable on narrow rows so the globe/chevron trigger never
+   * spills left over the permission control. The model seat inside it
+   * absorbs the compression (flex 1 1 0, min-width 0 below).
+   */
+  div:has(> [data-slot="conversation.input.right"]) {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
   }
 
   .mr-route-trigger-label {
