@@ -107,6 +107,10 @@
     flex: 1 1 auto;
     min-width: 0;
     justify-content: flex-end;
+    /* Mirror the trailing group's internal gap (12px) so the provider
+       trigger has equal spacing to the permission button on its left and
+       the model seat on its right. */
+    margin-left: 12px;
   }
 
   .mr-route-trigger-label {
