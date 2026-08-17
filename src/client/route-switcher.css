@@ -1,4 +1,10 @@
 /* Quick provider route control beside DSH's composer model seat. */
+.mr-route-anchor {
+  /* Menu's wrapper span: never let the row crush the trigger. */
+  flex: none;
+  min-width: 0;
+}
+
 .mr-route-trigger {
   min-width: 0;
   max-width: 180px;
@@ -59,4 +65,39 @@
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
   line-height: 16px;
+}
+
+/*
+ * Mobile portrait: the composer row is an inline-size container. Keep the
+ * fixed control row intact — attachment, permission, provider (icon-only),
+ * context meter, send — and let the model seat absorb the remaining width.
+ * The breakpoint matches DSH's own narrow-composer rule (<=460px).
+ */
+@container (width <= 460px) {
+  .mr-route-anchor {
+    flex: 0 0 auto;
+  }
+
+  .mr-route-trigger {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 999px;
+  }
+
+  .mr-route-trigger-label {
+    display: none;
+  }
+
+  /* The model seat is the next sibling of the route-switcher wrapper. */
+  .mr-route-anchor + * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .mr-route-anchor + * [aria-haspopup="menu"] {
+    width: 100%;
+    max-width: 100%;
+  }
 }

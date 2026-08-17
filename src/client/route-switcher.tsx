@@ -171,6 +171,7 @@ export function RouteSwitcher({
 
   return (
     <Menu
+      className="mr-route-anchor"
       open={open}
       side="top"
       align="end"
