@@ -1,18 +1,19 @@
 /**
  * @fonlan/dsh-model-router client half: the Model Router settings page plus
- * bilingual dictionaries. The composer model picker needs no client
- * injection — the host catalog already renders the `model-router` group and
- * each model's description carries the active provider.
+ * a quick provider switcher beside DSH's composer model selector.
  */
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import { LOCALE_NS, zh, en } from './locales'
 import { makeSettingsSection } from './settings-section'
+import { registerRouteSwitcher } from './route-switcher'
 
 /** Services required before mounting (provided by the client runtime). */
-export const inject = ['slots', 'locale']
+export const inject = ['slots', 'locale', 'modelDirectories']
 
 /** Client plugin body. */
 export function apply(ctx: ClientContext): void {
@@ -32,4 +33,6 @@ export function apply(ctx: ClientContext): void {
       locale: LOCALE_NS,
     }, SettingsSection as never),
   )
+
+  registerRouteSwitcher(ctx)
 }

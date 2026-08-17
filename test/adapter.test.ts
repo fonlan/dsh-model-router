@@ -3,7 +3,7 @@ import type { LlmRuntime, LlmResolvedModelInfo, GenerateOptions } from '@deepsee
 import { ModelRouterAdapter, routeFor, type RouterFacts } from '../src/server/adapter'
 import type { MergedModel, RouterConfigShape } from '../src/shared/config'
 
-function facts(models: MergedModel[], config: RouterConfigShape = { models: {} }): RouterFacts {
+function facts(models: MergedModel[], config: RouterConfigShape = { models: {}, showQuickSwitch: true }): RouterFacts {
   const byId = new Map(models.map(m => [m.id, m]))
   return {
     catalog: () => ({ models, byId }),
@@ -25,11 +25,13 @@ function merged(id: string, ...providers: string[]): MergedModel {
 describe('routeFor', () => {
   it('resolves stored active, then order head, then catalog head', () => {
     const f = facts([merged('m1', 'a', 'b')], {
+      showQuickSwitch: true,
       models: { m1: { order: ['b', 'a'], active: 'b' } },
     })
     expect(routeFor(f, 'm1')).toEqual({ provider: 'b' })
 
     const f2 = facts([merged('m1', 'a', 'b')], {
+      showQuickSwitch: true,
       models: { m1: { order: ['b', 'a'], active: 'gone' } },
     })
     expect(routeFor(f2, 'm1')).toEqual({ provider: 'b' })
@@ -45,7 +47,7 @@ describe('ModelRouterAdapter.listModels', () => {
   it('advertises merged models with display name and active-provider badge', async () => {
     const adapter = new ModelRouterAdapter(facts(
       [merged('m1', 'a', 'b'), merged('m2', 'a')],
-      { models: { m1: { order: ['a', 'b'], active: 'b' } } },
+      { showQuickSwitch: true, models: { m1: { order: ['a', 'b'], active: 'b' } } },
     ))
     const listed = await adapter.listModels('model-router')
     expect(listed).toEqual([
@@ -68,7 +70,7 @@ describe('ModelRouterAdapter.resolveModel', () => {
       name: 'm1@a',
       context: { contextWindow: 128000 },
     }
-    const f = facts([merged('m1', 'a', 'b')], { models: { m1: { order: ['a', 'b'], active: 'a' } } })
+    const f = facts([merged('m1', 'a', 'b')], { showQuickSwitch: true, models: { m1: { order: ['a', 'b'], active: 'a' } } })
     const llm = {
       resolveModelInfo: async (provider: string, model: string) => {
         expect(provider).toBe('a')
@@ -91,7 +93,7 @@ describe('ModelRouterAdapter.resolveModel', () => {
 describe('ModelRouterAdapter.stream', () => {
   it('rewrites the provider and yields the real adapter stream', async () => {
     const calls: string[] = []
-    const f = facts([merged('m1', 'a', 'b')], { models: { m1: { order: ['a', 'b'], active: 'b' } } })
+    const f = facts([merged('m1', 'a', 'b')], { showQuickSwitch: true, models: { m1: { order: ['a', 'b'], active: 'b' } } })
     const llm = {
       stream: (options: GenerateOptions) => {
         calls.push(options.provider)

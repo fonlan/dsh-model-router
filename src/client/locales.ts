@@ -19,6 +19,16 @@ export const zh = {
   switchFailed: '切换失败：{message}',
   reorderFailed: '排序失败：{message}',
   providerCount: '{count} 个提供商',
+  routeButtonLabel: '快速切换模型路由',
+  routeButtonTitle: '切换当前模型的提供商',
+  routeButtonAria: '切换当前模型提供商，当前为 {provider}',
+  routeMenuTitle: '{model} · 选择提供商',
+  routeLoading: '加载路由…',
+  unknownProvider: '未知提供商',
+  noCredentialShort: '未配置凭据',
+  globalRouteHint: '切换后对所有会话的后续请求生效',
+  showQuickSwitchLabel: '在输入栏显示快速路由切换按钮',
+  showQuickSwitchDescription: '开启后，当当前模型是 model-router 路由时，在输入框模型选择器右侧显示 provider 快速切换按钮。',
 }
 
 export const en = {
@@ -36,4 +46,14 @@ export const en = {
   switchFailed: 'Switch failed: {message}',
   reorderFailed: 'Reorder failed: {message}',
   providerCount: '{count} providers',
+  routeButtonLabel: 'Quick model route switcher',
+  routeButtonTitle: 'Switch the current model provider',
+  routeButtonAria: 'Switch current model provider, currently {provider}',
+  routeMenuTitle: '{model} · Choose provider',
+  routeLoading: 'Loading routes…',
+  unknownProvider: 'Unknown provider',
+  noCredentialShort: 'No credentials',
+  globalRouteHint: 'Changes apply to subsequent requests in all sessions',
+  showQuickSwitchLabel: 'Show quick route switcher in the composer',
+  showQuickSwitchDescription: 'When enabled, a provider quick-switch button appears next to the model selector when the current model is a model-router route.',
 }

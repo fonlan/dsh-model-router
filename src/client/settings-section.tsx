@@ -58,6 +58,7 @@ export function makeSettingsSection(ctx: ClientContext): () => JSX.Element {
     const [loading, setLoading] = useState(true)
     const [busyModel, setBusyModel] = useState<string | null>(null)
     const [drag, setDrag] = useState<{ modelId: string; index: number } | null>(null)
+    const [quickSwitchBusy, setQuickSwitchBusy] = useState(false)
 
     const load = useCallback(async () => {
       setLoading(true)
@@ -110,11 +111,39 @@ export function makeSettingsSection(ctx: ClientContext): () => JSX.Element {
       }
     }, [t])
 
+    const toggleQuickSwitch = useCallback(async (value: boolean) => {
+      if (state === null) return
+      const previous = state.showQuickSwitch
+      setState(prev => prev === null ? prev : { ...prev, showQuickSwitch: value })
+      setQuickSwitchBusy(true)
+      try {
+        setState(await api.setShowQuickSwitch(value))
+        setError(null)
+      } catch (cause) {
+        setState(prev => prev === null ? prev : { ...prev, showQuickSwitch: previous })
+        setError(cause instanceof Error ? cause.message : String(cause))
+      } finally {
+        setQuickSwitchBusy(false)
+      }
+    }, [state])
+
     const models = useMemo(() => state?.models ?? [], [state])
 
     return (
       <div className="mr-root">
         <p className="mr-description">{t('settingsDescription')}</p>
+        <label className="mr-quick-switch">
+          <input
+            type="checkbox"
+            checked={state?.showQuickSwitch ?? true}
+            disabled={loading || quickSwitchBusy}
+            onChange={(event) => void toggleQuickSwitch(event.target.checked)}
+          />
+          <span className="mr-quick-switch-copy">
+            <span className="mr-quick-switch-label">{t('showQuickSwitchLabel')}</span>
+            <span className="mr-quick-switch-desc">{t('showQuickSwitchDescription')}</span>
+          </span>
+        </label>
         <div className="mr-toolbar">
           <span className="mr-count">{t('modelsCount', { count: models.length })}</span>
           <button type="button" className="mr-button" onClick={() => void load()} disabled={loading}>

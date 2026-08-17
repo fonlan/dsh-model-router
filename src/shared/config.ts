@@ -56,6 +56,12 @@ export interface RouterModelConfig {
 /** The whole router config document. */
 export interface RouterConfigShape {
   models: Record<string, RouterModelConfig>
+  /**
+   * Whether the quick route-switcher button is shown beside the composer
+   * model selector (settings → 模型路由 → 显示快速路由切换按钮). Stored
+   * globally; absent/unknown documents normalize to `true`.
+   */
+  showQuickSwitch: boolean
 }
 
 export const ROUTER_PROVIDER_ID = 'model-router'
@@ -216,9 +222,11 @@ export function setOrder(
 /** Shape-validate an unknown value as a RouterConfigShape (lenient). */
 export function normalizeConfig(value: unknown): RouterConfigShape {
   const models: Record<string, RouterModelConfig> = {}
-  if (typeof value !== 'object' || value === null) return { models }
-  const raw = (value as { models?: unknown }).models
-  if (typeof raw !== 'object' || raw === null) return { models }
+  if (typeof value !== 'object' || value === null) return { models, showQuickSwitch: true }
+  const root = value as { models?: unknown; showQuickSwitch?: unknown }
+  const showQuickSwitch = root.showQuickSwitch !== false
+  const raw = root.models
+  if (typeof raw !== 'object' || raw === null) return { models, showQuickSwitch }
   for (const [id, entry] of Object.entries(raw as Record<string, unknown>)) {
     if (typeof entry !== 'object' || entry === null) continue
     const e = entry as { order?: unknown; active?: unknown }
@@ -227,5 +235,5 @@ export function normalizeConfig(value: unknown): RouterConfigShape {
     if (active === '') continue
     models[id] = { order, active }
   }
-  return { models }
+  return { models, showQuickSwitch }
 }

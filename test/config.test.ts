@@ -66,6 +66,7 @@ describe('initialConfigFor / resolveActive', () => {
 
   it('resolves stored active, then first remaining order entry, then catalog head', () => {
     const cfg: RouterConfigShape = {
+      showQuickSwitch: true,
       models: {
         m1: { order: ['a', 'b'], active: 'b' },
         m2: { order: ['a', 'b'], active: 'gone' },
@@ -81,7 +82,7 @@ describe('initialConfigFor / resolveActive', () => {
 })
 
 describe('syncConfig', () => {
-  const base: RouterConfigShape = { models: { m1: { order: ['a', 'b'], active: 'b' } } }
+  const base: RouterConfigShape = { showQuickSwitch: true, models: { m1: { order: ['a', 'b'], active: 'b' } } }
 
   it('creates initial config for unknown models', () => {
     const { models, changed } = syncConfig(base, 'm2', ['x', 'y'])
@@ -115,7 +116,7 @@ describe('syncConfig', () => {
 })
 
 describe('setActive / setOrder', () => {
-  const cfg: RouterConfigShape = { models: { m1: { order: ['a', 'b', 'c'], active: 'a' } } }
+  const cfg: RouterConfigShape = { showQuickSwitch: true, models: { m1: { order: ['a', 'b', 'c'], active: 'a' } } }
 
   it('switches active and preserves order', () => {
     const { models, changed } = setActive(cfg, 'm1', 'c', ['a', 'b', 'c'])
@@ -142,7 +143,14 @@ describe('setActive / setOrder', () => {
 describe('normalizeConfig', () => {
   it('tolerates junk and repairs broken entries', () => {
     expect(normalizeConfig(null).models).toEqual({})
+    expect(normalizeConfig(null).showQuickSwitch).toBe(true)
     expect(normalizeConfig({ models: { m1: { order: [1, 'a'], active: 2 } } }).models.m1)
       .toEqual({ order: ['a'], active: 'a' })
+  })
+
+  it('defaults the quick-switch toggle on and honors explicit false', () => {
+    expect(normalizeConfig({ models: {} }).showQuickSwitch).toBe(true)
+    expect(normalizeConfig({ models: {}, showQuickSwitch: false }).showQuickSwitch).toBe(false)
+    expect(normalizeConfig({ models: {}, showQuickSwitch: true }).showQuickSwitch).toBe(true)
   })
 })

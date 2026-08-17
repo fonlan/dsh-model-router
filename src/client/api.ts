@@ -14,6 +14,8 @@ export interface RouterModelView {
 }
 
 export interface ModelRouterState {
+  /** Whether the composer quick route-switcher button is enabled. */
+  showQuickSwitch: boolean
   providers: RouterProviderView[]
   models: RouterModelView[]
 }
@@ -53,4 +55,6 @@ export const api = {
   reorder: (modelId: string, order: string[]) =>
     call<ModelRouterState>('reorder', { modelId, order }),
   refresh: () => call<ModelRouterState>('refresh'),
+  setShowQuickSwitch: (value: boolean) =>
+    call<ModelRouterState>('set-show-quick-switch', { value }),
 }

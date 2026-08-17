@@ -29,12 +29,17 @@ export const RouterConfigSchema: z<RouterConfigShape> = z.object({
     order: z.array(z.string()),
     active: z.string(),
   })),
+  // Older documents predate the toggle; normalizeConfig defaults to true.
+  // Schemastery object keys are input-optional, so absent is valid here.
+  showQuickSwitch: z.boolean(),
 })
 
-const EMPTY_CONFIG: RouterConfigShape = { models: {} }
+const EMPTY_CONFIG: RouterConfigShape = { models: {}, showQuickSwitch: true }
 
 /** The settings-page state view served by the API. */
 export interface ModelRouterState {
+  /** Whether the composer quick route-switcher button is enabled. */
+  showQuickSwitch: boolean
   providers: Array<{ id: string; name: string; credentialConfigured: boolean }>
   models: Array<{
     id: string
@@ -159,7 +164,7 @@ export class ModelRouterService implements RouterFacts {
     }
     if (!changed) return
     try {
-      await this.scope.replace({ models: next })
+      await this.scope.replace({ models: next, showQuickSwitch: this.config().showQuickSwitch })
     } catch (error) {
       this.ctx.logger.warn(`model-router: reconcile persist failed: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -181,6 +186,7 @@ export class ModelRouterService implements RouterFacts {
     const names = catalog.providerNames
     const creds = catalog.credentialConfigured
     return {
+      showQuickSwitch: config.showQuickSwitch,
       providers: catalog.providers.map(provider => ({
         id: provider.id,
         name: names.get(provider.id) ?? provider.id,
@@ -230,10 +236,20 @@ export class ModelRouterService implements RouterFacts {
     await this.persist(models)
   }
 
+  /** Toggle the composer quick route-switcher button (global, persisted). */
+  async setShowQuickSwitch(value: boolean): Promise<void> {
+    if (this.scope === undefined) {
+      throw new Error('model-router: settings service is not available in this profile')
+    }
+    const current = this.config()
+    if (current.showQuickSwitch === value) return
+    await this.scope.replace({ models: current.models, showQuickSwitch: value })
+  }
+
   private async persist(models: Record<string, { order: string[]; active: string }>): Promise<void> {
     if (this.scope === undefined) {
       throw new Error('model-router: settings service is not available in this profile')
     }
-    await this.scope.replace({ models })
+    await this.scope.replace({ models, showQuickSwitch: this.config().showQuickSwitch })
   }
 }

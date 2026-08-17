@@ -13,6 +13,41 @@
   line-height: 20px;
 }
 
+.mr-quick-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-inverted);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-module-platform);
+  cursor: pointer;
+}
+
+.mr-quick-switch input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: var(--dsw-alias-accent);
+}
+
+.mr-quick-switch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mr-quick-switch-label {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.mr-quick-switch-desc {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .mr-toolbar {
   display: flex;
   justify-content: space-between;
