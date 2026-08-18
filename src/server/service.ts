@@ -66,8 +66,12 @@ export class ModelRouterService implements RouterFacts {
     credentialConfigured: new Map(),
   }
   private inflight: Promise<RouterCatalog> | null = null
+  private cachedAt = 0
   private scope: SettingsScope<RouterConfigShape> | undefined
   private registration: AdapterRegistrationHandle | undefined
+
+  /** How long a built catalog is considered fresh before being rebuilt. */
+  private readonly catalogTtlMs = 30_000
 
   constructor(ctx: Context) {
     this.ctx = ctx
@@ -124,12 +128,27 @@ export class ModelRouterService implements RouterFacts {
 
   // ── catalog lifecycle ────────────────────────────────────────────────────
 
-  /** Rebuild the catalog (in-flight dedupe; failures keep the last good one). */
-  refreshCatalog(): Promise<RouterCatalog> {
+  /**
+   * Return the live catalog, rebuilding it only when it is stale (older than
+   * `catalogTtlMs`) or `force` is set. Concurrent callers share one in-flight
+   * build; a failed build keeps the last good catalog.
+   *
+   * The TTL is what keeps the composer quick-switcher snappy: every
+   * `state()` RPC goes through here, and without a cache each one rebuilt the
+   * catalog — including per-provider `listModels` network calls — which is
+   * what made the button gray out (routerLoading) for the whole duration.
+   * Topology events (`llm/adapters-updated`) and explicit user refreshes pass
+   * `force` so the cache never hides real changes.
+   */
+  refreshCatalog(force = false): Promise<RouterCatalog> {
+    if (!force && this.inflight === null && Date.now() - this.cachedAt < this.catalogTtlMs) {
+      return Promise.resolve(this.cached)
+    }
     if (this.inflight !== null) return this.inflight
     this.inflight = buildCatalog(this.ctx, this.config().ignoreModelIdPrefix)
       .then((catalog) => {
         this.cached = catalog
+        this.cachedAt = Date.now()
         return catalog
       })
       .catch((error) => {
@@ -142,9 +161,9 @@ export class ModelRouterService implements RouterFacts {
     return this.inflight
   }
 
-  /** Refresh, then persist any config drift (migration, new/vanished models). */
+  /** Refresh (forced), then persist any config drift (migration, new/vanished models). */
   async refreshAndReconcile(): Promise<void> {
-    const catalog = await this.refreshCatalog()
+    const catalog = await this.refreshCatalog(true)
     if (this.scope === undefined) return
     const current = this.config()
     const { models, changed } = reconcileConfig(current, catalog.models)

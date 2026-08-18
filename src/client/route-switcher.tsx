@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ClientContext, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -50,15 +50,20 @@ export function RouteSwitcher({
   const isRouterModel = available && current?.provider === ROUTER_PROVIDER_ID
   const modelId = isRouterModel ? current.model : null
 
-  const loadRouterState = useCallback(async () => {
-    setRouterLoading(true)
+  /**
+   * Fetch the router state. `silent` skips the busy state: background
+   * refreshes (directory-ready, model switch) should never gray out the
+   * button — only the initial load and explicit user actions do.
+   */
+  const loadRouterState = useCallback(async (silent = false) => {
+    if (!silent) setRouterLoading(true)
     try {
       setRouterState(await api.state())
       setRouterError(null)
     } catch (cause) {
       setRouterError(cause instanceof Error ? cause.message : String(cause))
     } finally {
-      setRouterLoading(false)
+      if (!silent) setRouterLoading(false)
     }
   }, [])
 
@@ -89,9 +94,22 @@ export function RouteSwitcher({
   // refresh so this button never shows a stale active provider. Include the
   // model id: switching between two router models can leave the directory in
   // the same ready state while changing the API row we need to display.
+  //
+  // This refresh is debounced and silent: directory refreshes fire in bursts
+  // (each settings change re-loads it), and the whole point of the silent
+  // mode is that background refreshes never gray out the button.
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (!isRouterModel || modelId === null || directoryState.status !== 'ready') return
-    void loadRouterState()
+    if (refreshTimer.current !== null) clearTimeout(refreshTimer.current)
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null
+      void loadRouterState(true)
+    }, 300)
+    return () => {
+      if (refreshTimer.current !== null) clearTimeout(refreshTimer.current)
+      refreshTimer.current = null
+    }
   }, [directoryState.status, isRouterModel, loadRouterState, modelId])
 
   const routeModel = useMemo(
