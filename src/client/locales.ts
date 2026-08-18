@@ -6,7 +6,10 @@ export const LOCALE_NS = 'model-router'
 
 export const zh = {
   settingsTitle: '模型路由',
-  settingsDescription: '每个模型按 model id 聚合所有提供商；点击提供商切换该模型当前使用的路由，拖拽调整优先级顺序（供后续自动切换使用）。',
+  settingsCardDescription: '模型聚合、提供商切换与优先级顺序',
+  expand: '展开',
+  collapse: '收起',
+  readOnly: '本部署的设置为只读。',
   loading: '加载中…',
   loadFailed: '加载失败：{message}',
   retry: '重试',
@@ -35,7 +38,10 @@ export const zh = {
 
 export const en = {
   settingsTitle: 'Model Router',
-  settingsDescription: 'Each model aggregates its providers by exact model id. Click a provider to switch where this model currently routes; drag to adjust the preference order (used by automatic failover later).',
+  settingsCardDescription: 'Model aggregation, provider switching and preference order',
+  expand: 'Expand',
+  collapse: 'Collapse',
+  readOnly: 'This deployment stores settings read-only.',
   loading: 'Loading…',
   loadFailed: 'Load failed: {message}',
   retry: 'Retry',

@@ -1,16 +1,40 @@
 /**
- * The Model Router settings page: one card per merged model, provider chips
- * that switch the active route on click and reorder by native HTML5 drag &
- * drop (preference order for future automatic failover). All reads/mutations
- * go through the plugin's fenced API; the server persists through the
- * settings service, so a switch here is live for the next request globally.
+ * The Model Router Settings Card (设置 → 插件 → 插件配置 → 模型路由).
+ *
+ * Renders its own expandable chrome aligned with the built-in plugin cards
+ * (external plugins cannot import PluginCard): a header naming the plugin and
+ * what its settings govern, disclosing the router controls in place. All
+ * reads/mutations go through the plugin's fenced API; the server persists
+ * through the `model-router` settings namespace, so a switch here is live for
+ * the next request globally.
+ *
+ * The bound settings scope (the same `model-router` namespace the host half
+ * registers) supplies the card's dispatch state: while the namespace is merely
+ * loading the card stays mounted, and when it is unavailable (deployment
+ * without the host half) nothing renders — matching the built-in cards. A
+ * read-only deployment shows the built-in card's banner and disables the
+ * mutation controls.
  */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import { LOCALE_NS } from './locales'
 import { api, type ModelRouterState, type RouterModelView } from './api'
-import './settings-section.css'
+import './settings-card.css'
+
+/** Client settings scope face (subset of @deepseek-ai/dsh-client-runtime). */
+export interface SettingsScopeFace {
+  getSnapshot(): {
+    status: 'loading' | 'ready' | 'unavailable'
+    writable: boolean
+  }
+  subscribe(listener: () => void): () => void
+}
+
+export interface SettingsCardProps {
+  /** The bound `model-router` settings scope (from the slot entry's inject face). */
+  scope: SettingsScopeFace
+}
 
 function arrayMove<T>(list: readonly T[], from: number, to: number): T[] {
   const next = [...list]
@@ -40,8 +64,8 @@ function useLocaleRevision(ctx: ClientContext): number {
   return useSyncExternalStore(subscribe, getSnapshot)
 }
 
-export function makeSettingsSection(ctx: ClientContext): () => JSX.Element {
-  // Bound translation is namespace-typed; the section's props use the plain
+export function makeSettingsCard(ctx: ClientContext): (props: SettingsCardProps) => JSX.Element | null {
+  // Bound translation is namespace-typed; the card's props use the plain
   // Translate face (string keys), which the dict satisfies structurally.
   const t: Translate = (() => {
     try {
@@ -51,8 +75,17 @@ export function makeSettingsSection(ctx: ClientContext): () => JSX.Element {
     }
   })()
 
-  return function ModelRouterSettingsSection(): JSX.Element {
+  return function ModelRouterSettingsCard(props: SettingsCardProps): JSX.Element | null {
+    const { scope } = props
+    // Bind the methods: React invokes getSnapshot/subscribe as bare functions,
+    // and SettingsScopeController's methods depend on `this`.
+    const snapshot = useSyncExternalStore(
+      (listener) => scope.subscribe(listener),
+      () => scope.getSnapshot(),
+    )
     useLocaleRevision(ctx)
+    // Card-local disclosure: collapsed by default, like the built-in plugin cards.
+    const [open, setOpen] = useState(false)
     const [state, setState] = useState<ModelRouterState | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
@@ -144,71 +177,104 @@ export function makeSettingsSection(ctx: ClientContext): () => JSX.Element {
       }
     }, [state])
 
+    // The namespace is served by the host once the scope is ready. While it is
+    // merely loading, keep the card mounted (the tab already dispatched it);
+    // if it is unavailable (deployment without the host half), render nothing.
+    if (snapshot.status === 'unavailable') return null
+    const writable = snapshot.writable
+
     const models = useMemo(() => state?.models ?? [], [state])
 
     return (
-      <div className="mr-root">
-        <p className="mr-description">{t('settingsDescription')}</p>
-        <label className="mr-quick-switch">
-          <input
-            type="checkbox"
-            checked={state?.showQuickSwitch ?? true}
-            disabled={loading || quickSwitchBusy}
-            onChange={(event) => void toggleQuickSwitch(event.target.checked)}
-          />
-          <span className="mr-quick-switch-copy">
-            <span className="mr-quick-switch-label">{t('showQuickSwitchLabel')}</span>
-            <span className="mr-quick-switch-desc">{t('showQuickSwitchDescription')}</span>
+      <li className="mr-settings-card" data-open={open ? '' : undefined}>
+        <button
+          type="button"
+          className="mr-settings-head"
+          aria-expanded={open}
+          aria-label={(open ? t('collapse') : t('expand')) + '：' + t('settingsTitle')}
+          onClick={() => setOpen(!open)}
+        >
+          <span className="mr-settings-head-text">
+            <span className="mr-settings-title">{t('settingsTitle')}</span>
+            <span className="mr-settings-sub">{t('settingsCardDescription')}</span>
           </span>
-        </label>
-        <label className="mr-quick-switch">
-          <input
-            type="checkbox"
-            checked={state?.ignoreModelIdPrefix ?? true}
-            disabled={loading || ignorePrefixBusy}
-            onChange={(event) => void toggleIgnorePrefix(event.target.checked)}
-          />
-          <span className="mr-quick-switch-copy">
-            <span className="mr-quick-switch-label">{t('ignorePrefixLabel')}</span>
-            <span className="mr-quick-switch-desc">{t('ignorePrefixDescription')}</span>
+          <span className="mr-settings-chevron" data-open={open ? '' : undefined} aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3.5 5.25L7 8.75L10.5 5.25" stroke="currentColor" strokeWidth="1.5"
+                strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </span>
-        </label>
-        <div className="mr-toolbar">
-          <span className="mr-count">{t('modelsCount', { count: models.length })}</span>
-          <button type="button" className="mr-button" onClick={() => void load()} disabled={loading}>
-            {t('refresh')}
-          </button>
-        </div>
-        {error !== null && (
-          <div className="mr-error" role="alert">{error}</div>
+        </button>
+        {open && (
+          <div className="mr-settings-body">
+            {!writable && (
+              <p className="mr-settings-readonly" role="status">{t('readOnly')}</p>
+            )}
+            <div className="mr-root">
+              <label className="mr-quick-switch">
+                <input
+                  type="checkbox"
+                  checked={state?.showQuickSwitch ?? true}
+                  disabled={loading || quickSwitchBusy || !writable}
+                  onChange={(event) => void toggleQuickSwitch(event.target.checked)}
+                />
+                <span className="mr-quick-switch-copy">
+                  <span className="mr-quick-switch-label">{t('showQuickSwitchLabel')}</span>
+                  <span className="mr-quick-switch-desc">{t('showQuickSwitchDescription')}</span>
+                </span>
+              </label>
+              <label className="mr-quick-switch">
+                <input
+                  type="checkbox"
+                  checked={state?.ignoreModelIdPrefix ?? true}
+                  disabled={loading || ignorePrefixBusy || !writable}
+                  onChange={(event) => void toggleIgnorePrefix(event.target.checked)}
+                />
+                <span className="mr-quick-switch-copy">
+                  <span className="mr-quick-switch-label">{t('ignorePrefixLabel')}</span>
+                  <span className="mr-quick-switch-desc">{t('ignorePrefixDescription')}</span>
+                </span>
+              </label>
+              <div className="mr-toolbar">
+                <span className="mr-count">{t('modelsCount', { count: models.length })}</span>
+                <button type="button" className="mr-button" onClick={() => void load()} disabled={loading}>
+                  {t('refresh')}
+                </button>
+              </div>
+              {error !== null && (
+                <div className="mr-error" role="alert">{error}</div>
+              )}
+              {loading && models.length === 0 && (
+                <div className="mr-empty">{t('loading')}</div>
+              )}
+              {!loading && models.length === 0 && (
+                <div className="mr-empty">{t('empty')}</div>
+              )}
+              <div className="mr-models">
+                {models.map(model => (
+                  <ModelCard
+                    key={model.id}
+                    model={model}
+                    t={t}
+                    readOnly={!writable}
+                    busy={busyModel === model.id}
+                    dragging={drag}
+                    onDragStart={index => setDrag({ modelId: model.id, index })}
+                    onDragEnd={() => setDrag(null)}
+                    onDrop={index => {
+                      if (drag !== null && drag.modelId === model.id) {
+                        void reorder(model, drag.index, index)
+                      }
+                      setDrag(null)
+                    }}
+                    onSwitch={providerId => void switchActive(model, providerId)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
         )}
-        {loading && models.length === 0 && (
-          <div className="mr-empty">{t('loading')}</div>
-        )}
-        {!loading && models.length === 0 && (
-          <div className="mr-empty">{t('empty')}</div>
-        )}
-        <div className="mr-models">
-          {models.map(model => (
-            <ModelCard
-              key={model.id}
-              model={model}
-              t={t}
-              busy={busyModel === model.id}
-              dragging={drag}
-              onDragStart={index => setDrag({ modelId: model.id, index })}
-              onDragEnd={() => setDrag(null)}
-              onDrop={index => {
-                if (drag !== null && drag.modelId === model.id) {
-                  void reorder(model, drag.index, index)
-                }
-                setDrag(null)
-              }}
-              onSwitch={providerId => void switchActive(model, providerId)}
-            />
-          ))}
-        </div>
-      </div>
+      </li>
     )
   }
 }
@@ -216,6 +282,7 @@ export function makeSettingsSection(ctx: ClientContext): () => JSX.Element {
 interface ModelCardProps {
   model: RouterModelView
   t: Translate
+  readOnly: boolean
   busy: boolean
   dragging: { modelId: string; index: number } | null
   onDragStart: (index: number) => void
@@ -225,7 +292,7 @@ interface ModelCardProps {
 }
 
 function ModelCard(props: ModelCardProps): JSX.Element {
-  const { model, t, busy, dragging } = props
+  const { model, t, readOnly, busy, dragging } = props
   return (
     <section className={`mr-card${busy ? ' mr-card-busy' : ''}`}>
       <header className="mr-card-header">
@@ -248,7 +315,7 @@ function ModelCard(props: ModelCardProps): JSX.Element {
                 !selectable ? 'mr-provider-nocred' : '',
                 dropTarget ? 'mr-provider-drop' : '',
               ].filter(Boolean).join(' ')}
-              draggable={!busy && model.providers.length > 1}
+              draggable={!busy && !readOnly && model.providers.length > 1}
               title={selectable ? undefined : t('noCredential')}
               onDragStart={(event) => {
                 props.onDragStart(index)
@@ -277,7 +344,7 @@ function ModelCard(props: ModelCardProps): JSX.Element {
               <button
                 type="button"
                 className="mr-provider-button"
-                disabled={!selectable || busy || active}
+                disabled={!selectable || busy || active || readOnly}
                 onClick={() => props.onSwitch(provider.id)}
               >
                 <span className="mr-provider-name">{provider.name}</span>
