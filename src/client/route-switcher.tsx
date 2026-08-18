@@ -78,7 +78,9 @@ export function RouteSwitcher({
   useEffect(() => {
     setOpen(false)
     setBusyProvider(null)
-    setRouterState(null)
+    // Keep the last-known router state across model switches: the global
+    // provider count stays valid while the per-model row refetches, so a
+    // single-provider router hides the button without a loading flash.
     setRouterError(null)
   }, [modelId])
 
@@ -135,6 +137,11 @@ export function RouteSwitcher({
 
   const activeProvider = providers.find(provider => provider.id === routeModel?.active)
   const activeName = activeProvider?.name ?? routeModel?.active ?? t('routeLoading')
+  // Nothing to switch between: hide when the router serves fewer than two
+  // providers in total (known as soon as the global state resolves, even
+  // while the per-model row is still loading), or when the current model
+  // is served by a single provider.
+  if (routerState !== null && routerState.providers.length < 2) return null
   if (routeModel !== undefined && providers.length < 2) return null
 
   const menuItems: MenuEntry[] = routeModel === undefined
