@@ -1,6 +1,6 @@
 {
   "name": "@fonlan/dsh-model-router",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "DSH plugin: a virtual model-router provider that aggregates every configured provider and model, routes each request to the model's currently active provider, and ships a settings page for per-model provider ordering and switching.",
   "license": "MIT",
   "repository": {
