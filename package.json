@@ -1,6 +1,6 @@
 {
   "name": "@fonlan/dsh-model-router",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "DSH plugin: a virtual model-router provider that aggregates every configured provider and model, routes each request to the model's currently active provider, and ships a settings page for per-model provider ordering and switching.",
   "license": "MIT",
   "repository": {
@@ -45,6 +45,7 @@
   },
   "scripts": {
     "build": "rm -rf lib && tsc -p tsconfig.build.json && tsdown",
+    "prepare": "pnpm build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.client.json",
     "bundle": "tsdown",
     "watch": "tsdown --watch",
