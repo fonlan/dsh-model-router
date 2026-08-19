@@ -19,6 +19,7 @@ import {
   displayProvider,
   resolveActive,
   ROUTER_PROVIDER_ID,
+  sortModelsForList,
   stripModelIdPrefix,
   type MergedModel,
   type RouterConfigShape,
@@ -34,6 +35,8 @@ export interface RouterFacts {
   providerNames(): ReadonlyMap<string, string>
   /** The LLM runtime to delegate to. */
   llm(): LlmRuntime
+  /** Record one model request for the recent-use ordering (fire-and-forget). */
+  noteModelUsed(modelId: string): void
 }
 
 /** One resolved route for a model id. */
@@ -86,10 +89,11 @@ export class ModelRouterAdapter extends LlmAdapter {
   }
 
   async listModels(_provider: string): Promise<readonly LlmModelInfo[]> {
+    const config = this.facts.config()
     const { models } = this.facts.catalog()
     const names = this.facts.providerNames()
     const out: LlmModelInfo[] = []
-    for (const merged of models) {
+    for (const merged of sortModelsForList(models, config)) {
       const route = routeFor(this.facts, merged.id)
       const display = displayProvider(merged, route?.provider)
       if (display === null) continue
@@ -127,6 +131,13 @@ export class ModelRouterAdapter extends LlmAdapter {
     const merged = route === null ? null : mergedFor(this.facts, options.model)
     if (route === null || merged === null) {
       throw new LlmError(`model-router: no provider serves model "${options.model}"`, 'NO_ADAPTER')
+    }
+    // Record the use for the recent-use model ordering; never blocks or
+    // fails the request (the service debounces persistence).
+    try {
+      this.facts.noteModelUsed(merged.id)
+    } catch {
+      // advisory only
     }
     // In-process delegation: the inner call resolves the real adapter and
     // runs its full pipeline (retry, waterfall, replay-state stripping). The

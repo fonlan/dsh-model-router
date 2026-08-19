@@ -16,6 +16,8 @@ import {
   resolveActive,
   setActive,
   setOrder,
+  sortModelsForList,
+  type ModelSortMode,
   type RouterConfigShape,
 } from '../shared/config.js'
 import { buildCatalog, type RouterCatalog } from './catalog.js'
@@ -33,9 +35,19 @@ export const RouterConfigSchema: z<RouterConfigShape> = z.object({
   // Schemastery object keys are input-optional, so absent is valid here.
   showQuickSwitch: z.boolean(),
   ignoreModelIdPrefix: z.boolean(),
+  modelSort: z.union([z.const('custom'), z.const('name'), z.const('recent')]),
+  modelOrder: z.array(z.string()),
+  recentlyUsed: z.dict(z.number()),
 })
 
-const EMPTY_CONFIG: RouterConfigShape = { models: {}, showQuickSwitch: true, ignoreModelIdPrefix: true }
+const EMPTY_CONFIG: RouterConfigShape = {
+  models: {},
+  showQuickSwitch: true,
+  ignoreModelIdPrefix: true,
+  modelSort: 'custom',
+  modelOrder: [],
+  recentlyUsed: {},
+}
 
 /** The settings-page state view served by the API. */
 export interface ModelRouterState {
@@ -43,6 +55,10 @@ export interface ModelRouterState {
   showQuickSwitch: boolean
   /** Whether model ids are matched with their leading vendor/ prefix ignored. */
   ignoreModelIdPrefix: boolean
+  /** The model-list display order mode (custom | name | recent). */
+  modelSort: ModelSortMode
+  /** Explicit model id order for custom mode (display order). */
+  modelOrder: string[]
   providers: Array<{ id: string; name: string; credentialConfigured: boolean }>
   models: Array<{
     id: string
@@ -73,6 +89,12 @@ export class ModelRouterService implements RouterFacts {
   /** How long a built catalog is considered fresh before being rebuilt. */
   private readonly catalogTtlMs = 30_000
 
+  /** Debounced recent-use persistence (see noteModelUsed / flushUsage). */
+  private readonly usageFlushMs = 1_500
+  private usageDebounce: ReturnType<typeof setTimeout> | null = null
+  private pendingUsage: Record<string, number> = {}
+  private usageFlushRunning = false
+
   constructor(ctx: Context) {
     this.ctx = ctx
   }
@@ -99,6 +121,14 @@ export class ModelRouterService implements RouterFacts {
   }
 
   stop(): void {
+    // Flush any pending recent-use writes before the scope is torn down.
+    if (this.usageDebounce !== null) {
+      clearTimeout(this.usageDebounce)
+      this.usageDebounce = null
+    }
+    if (Object.keys(this.pendingUsage).length > 0) {
+      void this.flushUsage()
+    }
     this.registration?.()
     this.registration = undefined
   }
@@ -124,6 +154,45 @@ export class ModelRouterService implements RouterFacts {
 
   llm() {
     return this.ctx.llm
+  }
+
+  /**
+   * Record one model request for the `recent` display order. Fire-and-forget
+   * (the adapter never awaits it): timestamps accumulate in memory and are
+   * persisted debounced, so a burst of requests coalesces into one settings
+   * write.
+   */
+  noteModelUsed(modelId: string): void {
+    if (this.scope === undefined) return
+    this.pendingUsage[modelId] = Date.now()
+    if (this.usageDebounce !== null) return
+    this.usageDebounce = setTimeout(() => {
+      this.usageDebounce = null
+      void this.flushUsage()
+    }, this.usageFlushMs)
+  }
+
+  /** Persist accumulated usage timestamps (merging with any concurrent writes). */
+  private async flushUsage(): Promise<void> {
+    if (this.usageFlushRunning) return
+    this.usageFlushRunning = true
+    const pending = this.pendingUsage
+    this.pendingUsage = {}
+    try {
+      if (this.scope === undefined || Object.keys(pending).length === 0) return
+      const current = this.config()
+      await this.scope.replace({
+        ...current,
+        recentlyUsed: { ...current.recentlyUsed, ...pending },
+      })
+    } catch (error) {
+      // Re-queue the failed batch so a transient write failure does not lose
+      // usage history; the next request retries it.
+      this.pendingUsage = { ...pending, ...this.pendingUsage }
+      this.ctx.logger.warn(`model-router: usage persist failed: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      this.usageFlushRunning = false
+    }
   }
 
   // ── catalog lifecycle ────────────────────────────────────────────────────
@@ -166,13 +235,13 @@ export class ModelRouterService implements RouterFacts {
     const catalog = await this.refreshCatalog(true)
     if (this.scope === undefined) return
     const current = this.config()
-    const { models, changed } = reconcileConfig(current, catalog.models)
+    const { models, modelOrder, changed } = reconcileConfig(current, catalog.models)
     if (!changed) return
     try {
       await this.scope.replace({
+        ...current,
         models,
-        showQuickSwitch: current.showQuickSwitch,
-        ignoreModelIdPrefix: current.ignoreModelIdPrefix,
+        ...(modelOrder === undefined ? {} : { modelOrder }),
       })
     } catch (error) {
       this.ctx.logger.warn(`model-router: reconcile persist failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -197,12 +266,14 @@ export class ModelRouterService implements RouterFacts {
     return {
       showQuickSwitch: config.showQuickSwitch,
       ignoreModelIdPrefix: config.ignoreModelIdPrefix,
+      modelSort: config.modelSort,
+      modelOrder: config.modelOrder,
       providers: catalog.providers.map(provider => ({
         id: provider.id,
         name: names.get(provider.id) ?? provider.id,
         credentialConfigured: creds.get(provider.id) ?? true,
       })),
-      models: catalog.models.map((model) => {
+      models: sortModelsForList(catalog.models, config).map((model) => {
         const ids = model.providers.map(provider => provider.provider)
         const stored = config.models[model.id] ?? initialConfigFor(ids)
         const active = resolveActive(config, model.id, ids)
@@ -253,11 +324,7 @@ export class ModelRouterService implements RouterFacts {
     }
     const current = this.config()
     if (current.showQuickSwitch === value) return
-    await this.scope.replace({
-      models: current.models,
-      showQuickSwitch: value,
-      ignoreModelIdPrefix: current.ignoreModelIdPrefix,
-    })
+    await this.scope.replace({ ...current, showQuickSwitch: value })
   }
 
   /**
@@ -272,12 +339,40 @@ export class ModelRouterService implements RouterFacts {
     }
     const current = this.config()
     if (current.ignoreModelIdPrefix === value) return
-    await this.scope.replace({
-      models: current.models,
-      showQuickSwitch: current.showQuickSwitch,
-      ignoreModelIdPrefix: value,
-    })
+    await this.scope.replace({ ...current, ignoreModelIdPrefix: value })
     await this.refreshAndReconcile()
+  }
+
+  /** Switch the model-list display order mode (global, persisted). */
+  async setModelSort(mode: ModelSortMode): Promise<void> {
+    if (this.scope === undefined) {
+      throw new Error('model-router: settings service is not available in this profile')
+    }
+    const current = this.config()
+    if (current.modelSort === mode) return
+    await this.scope.replace({ ...current, modelSort: mode })
+  }
+
+  /**
+   * Replace the explicit custom model order (global, persisted). Vanished
+   * ids are pruned and missing catalog models appended, so the stored order
+   * always covers the live catalog.
+   */
+  async setModelOrder(order: string[]): Promise<void> {
+    if (this.scope === undefined) {
+      throw new Error('model-router: settings service is not available in this profile')
+    }
+    await this.refreshCatalog()
+    const ids = new Set(this.cached.models.map(model => model.id))
+    const clean = order.filter(id => ids.has(id))
+    for (const model of this.cached.models) {
+      if (!clean.includes(model.id)) clean.push(model.id)
+    }
+    const current = this.config()
+    const sameOrder = clean.length === current.modelOrder.length
+      && clean.every((id, at) => id === current.modelOrder[at])
+    if (sameOrder) return
+    await this.scope.replace({ ...current, modelOrder: clean })
   }
 
   private async persist(models: Record<string, { order: string[]; active: string }>): Promise<void> {
@@ -285,10 +380,6 @@ export class ModelRouterService implements RouterFacts {
       throw new Error('model-router: settings service is not available in this profile')
     }
     const current = this.config()
-    await this.scope.replace({
-      models,
-      showQuickSwitch: current.showQuickSwitch,
-      ignoreModelIdPrefix: current.ignoreModelIdPrefix,
-    })
+    await this.scope.replace({ ...current, models })
   }
 }

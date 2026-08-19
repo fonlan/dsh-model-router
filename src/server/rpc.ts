@@ -150,6 +150,22 @@ export function registerApiRoutes(ctx: Context, service: ModelRouterService): ()
     return service.state()
   })
 
+  route('set-model-sort', async (p) => {
+    if (p.mode !== 'custom' && p.mode !== 'name' && p.mode !== 'recent') {
+      throw new Error('mode 必须是 custom、name 或 recent')
+    }
+    await service.setModelSort(p.mode)
+    return service.state()
+  })
+
+  route('set-model-order', async (p) => {
+    if (!Array.isArray(p.order) || !p.order.every((id): id is string => typeof id === 'string')) {
+      throw new Error('order 必须是模型 id 数组')
+    }
+    await service.setModelOrder(p.order)
+    return service.state()
+  })
+
   return () => {
     for (const dispose of disposers) dispose()
   }

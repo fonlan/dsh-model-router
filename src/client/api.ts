@@ -5,6 +5,8 @@ export interface RouterProviderView {
   credentialConfigured: boolean
 }
 
+export type ModelSortMode = 'custom' | 'name' | 'recent'
+
 export interface RouterModelView {
   id: string
   name: string
@@ -18,6 +20,10 @@ export interface ModelRouterState {
   showQuickSwitch: boolean
   /** Whether model ids are matched with their leading vendor/ prefix ignored. */
   ignoreModelIdPrefix: boolean
+  /** The model-list display order mode (custom | name | recent). */
+  modelSort: ModelSortMode
+  /** Explicit model id order for custom mode (display order). */
+  modelOrder: string[]
   providers: RouterProviderView[]
   models: RouterModelView[]
 }
@@ -61,4 +67,8 @@ export const api = {
     call<ModelRouterState>('set-show-quick-switch', { value }),
   setIgnoreModelIdPrefix: (value: boolean) =>
     call<ModelRouterState>('set-ignore-model-id-prefix', { value }),
+  setModelSort: (mode: ModelSortMode) =>
+    call<ModelRouterState>('set-model-sort', { mode }),
+  setModelOrder: (order: string[]) =>
+    call<ModelRouterState>('set-model-order', { order }),
 }

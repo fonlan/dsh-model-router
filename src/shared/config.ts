@@ -64,6 +64,22 @@ export interface RouterModelConfig {
   active: string
 }
 
+/**
+ * How the router orders the model list it advertises to the host model
+ * picker (the `model-router` group in DSH's model selection box).
+ *
+ * - `custom`: the explicit `modelOrder` array wins; models absent from it are
+ *   appended in catalog (first-seen) order.
+ * - `name`: models sorted by their display name (active provider's name),
+ *   falling back to the merged id.
+ * - `recent`: models sorted by most-recently-used first (timestamp desc);
+ *   never-used models come last in catalog order.
+ *
+ * Absent/unknown documents normalize to `custom` (the pre-existing catalog
+ * order, so upgrading is a no-op until the user changes it).
+ */
+export type ModelSortMode = 'custom' | 'name' | 'recent'
+
 /** The whole router config document. */
 export interface RouterConfigShape {
   models: Record<string, RouterModelConfig>
@@ -81,6 +97,23 @@ export interface RouterConfigShape {
    * `true`.
    */
   ignoreModelIdPrefix: boolean
+  /**
+   * The model-list display order mode (settings → 模型路由 → 模型显示顺序).
+   * Absent/unknown documents normalize to `custom`.
+   */
+  modelSort: ModelSortMode
+  /**
+   * Explicit model id order for `custom` mode, in display order. Kept
+   * reconciled against the catalog (vanished ids pruned, new ids appended).
+   * Absent/unknown documents normalize to `[]`.
+   */
+  modelOrder: string[]
+  /**
+   * Merged model id → last-use epoch millis, for `recent` mode. Written by
+   * the router adapter whenever a model request streams. Absent/unknown
+   * documents normalize to `{}`.
+   */
+  recentlyUsed: Record<string, number>
 }
 
 export const ROUTER_PROVIDER_ID = 'model-router'
@@ -150,6 +183,59 @@ export function displayProvider(
 ): ProviderModelInfo | null {
   if (merged.providers.length === 0) return null
   return merged.providers.find(p => p.provider === active) ?? merged.providers[0]
+}
+
+/** The display name a merged model advertises (active provider's name). */
+export function displayNameOf(
+  model: MergedModel,
+  config: RouterConfigShape,
+): string {
+  const ids = model.providers.map(provider => provider.provider)
+  const active = resolveActive(config, model.id, ids)
+  return displayProvider(model, active ?? undefined)?.name ?? model.id
+}
+
+/**
+ * Order the merged catalog the way the model picker should list it, per the
+ * configured `modelSort` mode. Always returns a permutation of `models`
+ * (never drops or duplicates entries).
+ *
+ * - `custom`: `config.modelOrder` first (in stored order), then any model not
+ *   present in it, in catalog order.
+ * - `name`: display-name ascending (numeric-aware, case-insensitive), ties
+ *   keep catalog order (stable sort).
+ * - `recent`: most-recently-used first; never-used models sink to the tail in
+ *   catalog order. Ties (equal timestamps, or both unused) keep catalog
+ *   order (stable sort).
+ */
+export function sortModelsForList(
+  models: readonly MergedModel[],
+  config: RouterConfigShape,
+): MergedModel[] {
+  if (config.modelSort === 'name') {
+    const byName = new Map(models.map(model => [model, displayNameOf(model, config)]))
+    return [...models].sort((left, right) =>
+      byName.get(left)!.localeCompare(byName.get(right)!, undefined, { numeric: true, sensitivity: 'base' }),
+    )
+  }
+  if (config.modelSort === 'recent') {
+    const recent = config.recentlyUsed ?? {}
+    return [...models].sort((left, right) =>
+      (recent[right.id] ?? -Infinity) - (recent[left.id] ?? -Infinity),
+    )
+  }
+  // custom: explicit order first (deduped), then the catalog-order tail
+  const listed: MergedModel[] = []
+  const seen = new Set<string>()
+  for (const id of config.modelOrder ?? []) {
+    if (seen.has(id)) continue
+    const model = models.find(candidate => candidate.id === id)
+    if (model === undefined) continue
+    seen.add(id)
+    listed.push(model)
+  }
+  const tail = models.filter(model => !seen.has(model.id))
+  return [...listed, ...tail]
 }
 
 /** Initial config for a model the user never configured: first in order wins. */
@@ -256,11 +342,14 @@ function sameModels(a: Record<string, RouterModelConfig>, b: Record<string, Rout
  * for `active`, and `order` becomes the deduped union in exact-key-first
  * order. Stored keys no longer mapping to any merged model are dropped (this
  * also covers turning the flag off — split models re-initialize fresh).
+ *
+ * `modelOrder` (custom display order) is reconciled the same way: vanished
+ * ids are pruned, newly discovered models are appended in catalog order.
  */
 export function reconcileConfig(
   config: RouterConfigShape,
   models: readonly MergedModel[],
-): { models: Record<string, RouterModelConfig>; changed: boolean } {
+): { models: Record<string, RouterModelConfig>; modelOrder: string[] | undefined; changed: boolean } {
   // stored key → merged id it belongs to (exact key wins; prefixed raw keys
   // map to their stripped merged id only while the flag is on)
   const keyToMerged = new Map<string, string>()
@@ -306,7 +395,31 @@ export function reconcileConfig(
     if (entry !== undefined) next[model.id] = entry
   }
 
-  return { models: next, changed: !sameModels(next, config.models) }
+  // Reconcile the custom display order against the live catalog: prune
+  // vanished ids, append newly discovered models in catalog order. Documents
+  // that predate the field (modelOrder undefined) keep it absent — the
+  // service's normalizeConfig materializes it on the next write, and an old
+  // document must not report drift merely because the field is missing.
+  const storedOrder = config.modelOrder
+  let modelOrder: string[] | undefined
+  let orderChanged = false
+  if (storedOrder !== undefined) {
+    const catalogIds = new Set(models.map(model => model.id))
+    modelOrder = storedOrder.filter(id => catalogIds.has(id))
+    orderChanged = modelOrder.length !== storedOrder.length
+    for (const model of models) {
+      if (!modelOrder.includes(model.id)) {
+        modelOrder.push(model.id)
+        orderChanged = true
+      }
+    }
+  }
+
+  return {
+    models: next,
+    modelOrder,
+    changed: !sameModels(next, config.models) || orderChanged,
+  }
 }
 
 /** Switch a model's active provider (no-op when already active). */
@@ -354,13 +467,34 @@ export function setOrder(
 export function normalizeConfig(value: unknown): RouterConfigShape {
   const models: Record<string, RouterModelConfig> = {}
   if (typeof value !== 'object' || value === null) {
-    return { models, showQuickSwitch: true, ignoreModelIdPrefix: true }
+    return { models, showQuickSwitch: true, ignoreModelIdPrefix: true, modelSort: 'custom', modelOrder: [], recentlyUsed: {} }
   }
-  const root = value as { models?: unknown; showQuickSwitch?: unknown; ignoreModelIdPrefix?: unknown }
+  const root = value as {
+    models?: unknown
+    showQuickSwitch?: unknown
+    ignoreModelIdPrefix?: unknown
+    modelSort?: unknown
+    modelOrder?: unknown
+    recentlyUsed?: unknown
+  }
   const showQuickSwitch = root.showQuickSwitch !== false
   const ignoreModelIdPrefix = root.ignoreModelIdPrefix !== false
+  const modelSort: ModelSortMode = root.modelSort === 'name' || root.modelSort === 'recent'
+    ? root.modelSort
+    : 'custom'
+  const modelOrder = Array.isArray(root.modelOrder)
+    ? root.modelOrder.filter((x): x is string => typeof x === 'string')
+    : []
+  const recentlyUsed: Record<string, number> = {}
+  if (typeof root.recentlyUsed === 'object' && root.recentlyUsed !== null) {
+    for (const [id, ts] of Object.entries(root.recentlyUsed as Record<string, unknown>)) {
+      if (typeof ts === 'number' && Number.isFinite(ts)) recentlyUsed[id] = ts
+    }
+  }
   const raw = root.models
-  if (typeof raw !== 'object' || raw === null) return { models, showQuickSwitch, ignoreModelIdPrefix }
+  if (typeof raw !== 'object' || raw === null) {
+    return { models, showQuickSwitch, ignoreModelIdPrefix, modelSort, modelOrder, recentlyUsed }
+  }
   for (const [id, entry] of Object.entries(raw as Record<string, unknown>)) {
     if (typeof entry !== 'object' || entry === null) continue
     const e = entry as { order?: unknown; active?: unknown }
@@ -369,5 +503,5 @@ export function normalizeConfig(value: unknown): RouterConfigShape {
     if (active === '') continue
     models[id] = { order, active }
   }
-  return { models, showQuickSwitch, ignoreModelIdPrefix }
+  return { models, showQuickSwitch, ignoreModelIdPrefix, modelSort, modelOrder, recentlyUsed }
 }

@@ -22,6 +22,7 @@ function facts(
     llm: () => {
       throw new Error('unused')
     },
+    noteModelUsed: () => {},
   }
 }
 
@@ -222,5 +223,26 @@ describe('ModelRouterAdapter.stream', () => {
     expect(delegated[0].provider).toBe('b')
     expect(delegated[0].model).toBe('deepseek/deepseek-v4-flash')
     expect(chunks).toEqual([{ type: 'finish', reason: 'stop' }])
+  })
+
+  it('records the merged model id as used for recent ordering', async () => {
+    const used: string[] = []
+    const f = facts([merged('m1', 'a', 'b')], {
+      showQuickSwitch: true,
+      ignoreModelIdPrefix: true,
+      models: { m1: { order: ['a', 'b'], active: 'a' } },
+    })
+    const llm = {
+      stream: (options: GenerateOptions) => (async function * chunks() {
+        yield { type: 'finish', reason: 'stop' } as const
+      })(),
+    } as unknown as LlmRuntime
+    const adapter = new ModelRouterAdapter({ ...f, llm: () => llm, noteModelUsed: id => { used.push(id) } })
+    for await (const _chunk of adapter.stream({
+      provider: 'model-router',
+      model: 'm1',
+      messages: [],
+    })) { /* drain */ }
+    expect(used).toEqual(['m1'])
   })
 })

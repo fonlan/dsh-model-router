@@ -34,6 +34,16 @@ export const zh = {
   showQuickSwitchDescription: '开启后，当当前模型是 model-router 路由时，在输入框模型选择器右侧显示 provider 快速切换按钮。',
   ignorePrefixLabel: '匹配时忽略模型 ID 前缀',
   ignorePrefixDescription: '开启后，deepseek/deepseek-v4-flash 与 deepseek-v4-flash 视为同一模型，统一显示不带前缀的模型 id（默认开启）。',
+  sortTitle: '模型显示顺序',
+  sortDescription: '模型选择列表中 model-router 分组内模型的排列方式。',
+  sortModeCustom: '自定义',
+  sortModeName: '按名称',
+  sortModeRecent: '最近使用',
+  sortModeDescCustom: '按下方拖拽的手动顺序排列',
+  sortModeDescName: '按模型名称排序（数字感知）',
+  sortModeDescRecent: '最近用过的模型排在最前',
+  sortCustomHint: '拖拽调整模型在模型选择列表中的显示顺序',
+  sortFailed: '排序设置失败：{message}',
 }
 
 export const en = {
@@ -66,4 +76,14 @@ export const en = {
   showQuickSwitchDescription: 'When enabled, a provider quick-switch button appears next to the model selector when the current model is a model-router route.',
   ignorePrefixLabel: 'Ignore model ID prefix when matching',
   ignorePrefixDescription: 'When enabled, deepseek/deepseek-v4-flash and deepseek-v4-flash are treated as the same model and shown without the prefix (on by default).',
+  sortTitle: 'Model display order',
+  sortDescription: 'How models inside the model-router group are ordered in the model picker.',
+  sortModeCustom: 'Custom',
+  sortModeName: 'By name',
+  sortModeRecent: 'Recently used',
+  sortModeDescCustom: 'Manual order via drag below',
+  sortModeDescName: 'Sort by model name (numeric-aware)',
+  sortModeDescRecent: 'Most recently used models first',
+  sortCustomHint: 'Drag to reorder models in the model picker',
+  sortFailed: 'Sort setting failed: {message}',
 }

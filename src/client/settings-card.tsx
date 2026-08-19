@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import { LOCALE_NS } from './locales'
-import { api, type ModelRouterState, type RouterModelView } from './api'
+import { api, type ModelRouterState, type ModelSortMode, type RouterModelView } from './api'
 import './settings-card.css'
 
 /** Client settings scope face (subset of @deepseek-ai/dsh-client-runtime). */
@@ -93,6 +93,8 @@ export function makeSettingsCard(ctx: ClientContext): (props: SettingsCardProps)
     const [drag, setDrag] = useState<{ modelId: string; index: number } | null>(null)
     const [quickSwitchBusy, setQuickSwitchBusy] = useState(false)
     const [ignorePrefixBusy, setIgnorePrefixBusy] = useState(false)
+    const [sortBusy, setSortBusy] = useState(false)
+    const [modelDrag, setModelDrag] = useState<{ index: number } | null>(null)
 
     const load = useCallback(async () => {
       setLoading(true)
@@ -177,6 +179,41 @@ export function makeSettingsCard(ctx: ClientContext): (props: SettingsCardProps)
       }
     }, [state])
 
+    const changeModelSort = useCallback(async (mode: ModelSortMode) => {
+      if (state === null || state.modelSort === mode) return
+      const previous = state.modelSort
+      setState(prev => prev === null ? prev : { ...prev, modelSort: mode })
+      setSortBusy(true)
+      try {
+        setState(await api.setModelSort(mode))
+        setError(null)
+      } catch (cause) {
+        setState(prev => prev === null ? prev : { ...prev, modelSort: previous })
+        setError(t('sortFailed', { message: cause instanceof Error ? cause.message : String(cause) }))
+      } finally {
+        setSortBusy(false)
+      }
+    }, [state, t])
+
+    const moveModel = useCallback(async (from: number, to: number) => {
+      if (state === null || from === to) return
+      // The drag list shows the full display order (modelOrder + catalog
+      // tail); persist the whole reordered id list as the new custom order.
+      const ids = state.models.map(model => model.id)
+      const order = arrayMove(ids, from, to)
+      setState(prev => prev === null ? prev : { ...prev, modelOrder: order })
+      setSortBusy(true)
+      try {
+        setState(await api.setModelOrder(order))
+        setError(null)
+      } catch (cause) {
+        setState(prev => prev === null ? prev : { ...prev, modelOrder: state.modelOrder })
+        setError(t('sortFailed', { message: cause instanceof Error ? cause.message : String(cause) }))
+      } finally {
+        setSortBusy(false)
+      }
+    }, [state, t])
+
     // The namespace is served by the host once the scope is ready. While it is
     // merely loading, keep the card mounted (the tab already dispatched it);
     // if it is unavailable (deployment without the host half), render nothing.
@@ -235,6 +272,77 @@ export function makeSettingsCard(ctx: ClientContext): (props: SettingsCardProps)
                   <span className="mr-quick-switch-desc">{t('ignorePrefixDescription')}</span>
                 </span>
               </label>
+              <div className="mr-sort">
+                <div className="mr-sort-head">
+                  <span className="mr-sort-title">{t('sortTitle')}</span>
+                  <span className="mr-sort-desc">{t('sortDescription')}</span>
+                </div>
+                <div className="mr-sort-modes" role="radiogroup" aria-label={t('sortTitle')}>
+                  {(['custom', 'name', 'recent'] as const).map(mode => (
+                    <label key={mode} className="mr-sort-mode">
+                      <input
+                        type="radio"
+                        name="mr-model-sort"
+                        checked={state?.modelSort === mode}
+                        disabled={loading || sortBusy || !writable}
+                        onChange={() => void changeModelSort(mode)}
+                      />
+                      <span className="mr-sort-mode-copy">
+                        <span className="mr-sort-mode-label">{t(`sortMode${mode[0].toUpperCase()}${mode.slice(1)}`)}</span>
+                        <span className="mr-sort-mode-desc">{t(`sortModeDesc${mode[0].toUpperCase()}${mode.slice(1)}`)}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {state?.modelSort === 'custom' && (
+                  <div className="mr-sort-custom">
+                    <p className="mr-sort-hint">{t('sortCustomHint')}</p>
+                    <ol className="mr-sort-list">
+                      {models.map((model, index) => {
+                        const dropTarget = modelDrag !== null && modelDrag.index !== index
+                        return (
+                          <li
+                            key={model.id}
+                            className={[
+                              'mr-sort-item',
+                              dropTarget ? 'mr-sort-item-drop' : '',
+                              sortBusy ? 'mr-sort-item-busy' : '',
+                            ].filter(Boolean).join(' ')}
+                            draggable={!sortBusy && writable}
+                            onDragStart={(event) => {
+                              setModelDrag({ index })
+                              event.dataTransfer.effectAllowed = 'move'
+                              try {
+                                event.dataTransfer.setData('text/plain', model.id)
+                              } catch {
+                                // drag data is cosmetic for our own handler
+                              }
+                            }}
+                            onDragOver={(event) => {
+                              if (modelDrag !== null && modelDrag.index !== index) {
+                                event.preventDefault()
+                                event.dataTransfer.dropEffect = 'move'
+                              }
+                            }}
+                            onDrop={(event) => {
+                              if (modelDrag !== null && modelDrag.index !== index) {
+                                event.preventDefault()
+                                moveModel(modelDrag.index, index)
+                              }
+                              setModelDrag(null)
+                            }}
+                            onDragEnd={() => setModelDrag(null)}
+                          >
+                            <span className="mr-grip" aria-hidden="true">⠿</span>
+                            <span className="mr-sort-model-name">{model.name}</span>
+                            <span className="mr-sort-model-id">{model.id}</span>
+                          </li>
+                        )
+                      })}
+                    </ol>
+                  </div>
+                )}
+              </div>
               <div className="mr-toolbar">
                 <span className="mr-count">{t('modelsCount', { count: models.length })}</span>
                 <button type="button" className="mr-button" onClick={() => void load()} disabled={loading}>

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  displayNameOf,
   displayProvider,
   initialConfigFor,
   mergeModels,
@@ -8,6 +9,7 @@ import {
   resolveActive,
   setActive,
   setOrder,
+  sortModelsForList,
   stripModelIdPrefix,
   syncConfig,
   type ProviderInfo,
@@ -332,5 +334,147 @@ describe('reconcileConfig', () => {
     expect(changed).toBe(true)
     expect(models['deepseek-v4-flash']).toEqual({ order: ['a', 'b'], active: 'a' })
     expect(models.other).toBeUndefined()
+  })
+})
+
+describe('reconcileConfig modelOrder', () => {
+  const catalog = mergeModels([opencode, official, mtplx])
+
+  it('appends new models to an empty order in catalog order', () => {
+    const config: RouterConfigShape = {
+      showQuickSwitch: true,
+      ignoreModelIdPrefix: true,
+      modelSort: 'custom',
+      modelOrder: [],
+      recentlyUsed: {},
+      models: {},
+    }
+    const { modelOrder, changed } = reconcileConfig(config, catalog)
+    expect(changed).toBe(true)
+    expect(modelOrder).toEqual(['deepseek-v4-flash', 'qwen3.7-max', 'glm-5.2', 'deepseek-v4-pro', 'automatosx-ax'])
+  })
+
+  it('keeps explicit order, prunes vanished ids, appends new ones', () => {
+    const config: RouterConfigShape = {
+      showQuickSwitch: true,
+      ignoreModelIdPrefix: true,
+      modelSort: 'custom',
+      modelOrder: ['glm-5.2', 'deepseek-v4-pro', 'gone'],
+      recentlyUsed: {},
+      models: {},
+    }
+    const { modelOrder, changed } = reconcileConfig(config, catalog)
+    expect(changed).toBe(true)
+    expect(modelOrder).toEqual(['glm-5.2', 'deepseek-v4-pro', 'deepseek-v4-flash', 'qwen3.7-max', 'automatosx-ax'])
+  })
+
+  it('is a no-op when the order already matches the catalog', () => {
+    const ids = catalog.map(model => model.id)
+    const models: RouterConfigShape['models'] = {}
+    for (const model of catalog) {
+      const providerIds = model.providers.map(provider => provider.provider)
+      models[model.id] = { order: [...providerIds], active: providerIds[0] }
+    }
+    const config: RouterConfigShape = {
+      showQuickSwitch: true,
+      ignoreModelIdPrefix: true,
+      modelSort: 'custom',
+      modelOrder: [...ids],
+      recentlyUsed: {},
+      models,
+    }
+    const { changed } = reconcileConfig(config, catalog)
+    expect(changed).toBe(false)
+  })
+})
+
+describe('sortModelsForList', () => {
+  const catalog = mergeModels([opencode, official, mtplx])
+  const ids = () => sortModelsForList(catalog, config).map(m => m.id)
+  let config: RouterConfigShape
+
+  beforeEach(() => {
+    config = {
+      showQuickSwitch: true,
+      ignoreModelIdPrefix: true,
+      modelSort: 'custom',
+      modelOrder: ['deepseek-v4-flash', 'qwen3.7-max', 'glm-5.2', 'deepseek-v4-pro', 'automatosx-ax'],
+      recentlyUsed: {},
+      models: {},
+    }
+  })
+
+  it('custom: follows modelOrder and appends unknown models in catalog order', () => {
+    config.modelOrder = ['automatosx-ax', 'glm-5.2']
+    expect(ids()).toEqual(['automatosx-ax', 'glm-5.2', 'deepseek-v4-flash', 'qwen3.7-max', 'deepseek-v4-pro'])
+  })
+
+  it('name: sorts by display name (active provider name, numeric-aware)', () => {
+    config.modelSort = 'name'
+    // names: DeepSeek V4 Flash, Qwen3.7 Max, GLM-5.2, DeepSeek V4 Pro, Qwen3.8 27B MTPLX
+    expect(ids()).toEqual([
+      'deepseek-v4-flash', // DeepSeek V4 Flash
+      'deepseek-v4-pro',   // DeepSeek V4 Pro
+      'glm-5.2',           // GLM-5.2
+      'qwen3.7-max',       // Qwen3.7 Max
+      'automatosx-ax',     // Qwen3.8 27B MTPLX
+    ])
+  })
+
+  it('recent: most recently used first, unused last in catalog order', () => {
+    config.modelSort = 'recent'
+    config.recentlyUsed = {
+      'glm-5.2': 300,
+      'deepseek-v4-flash': 100,
+      'automatosx-ax': 200,
+    }
+    expect(ids()).toEqual(['glm-5.2', 'automatosx-ax', 'deepseek-v4-flash', 'qwen3.7-max', 'deepseek-v4-pro'])
+  })
+
+  it('recent: ties and unused keep catalog order (stable)', () => {
+    config.modelSort = 'recent'
+    config.recentlyUsed = { 'deepseek-v4-flash': 100, 'qwen3.7-max': 100 }
+    expect(ids()).toEqual(['deepseek-v4-flash', 'qwen3.7-max', 'glm-5.2', 'deepseek-v4-pro', 'automatosx-ax'])
+  })
+
+  it('never drops or duplicates entries', () => {
+    config.modelOrder = ['automatosx-ax', 'automatosx-ax', 'deepseek-v4-pro']
+    const sorted = sortModelsForList(catalog, config)
+    expect(new Set(sorted.map(m => m.id)).size).toBe(sorted.length)
+    expect(sorted).toHaveLength(catalog.length)
+  })
+})
+
+describe('displayNameOf', () => {
+  it('uses the active provider name, falling back to the first provider', () => {
+    const merged = mergeModels([opencode, official]).find(m => m.id === 'deepseek-v4-flash')!
+    const config: RouterConfigShape = {
+      showQuickSwitch: true,
+      ignoreModelIdPrefix: true,
+      modelSort: 'custom',
+      modelOrder: [],
+      recentlyUsed: {},
+      models: { 'deepseek-v4-flash': { order: ['opencode-go', 'deepseek-official'], active: 'deepseek-official' } },
+    }
+    expect(displayNameOf(merged, config)).toBe('DeepSeek V4 Flash')
+    config.models['deepseek-v4-flash'].active = 'opencode-go'
+    expect(displayNameOf(merged, config)).toBe('DeepSeek V4 Flash')
+  })
+})
+
+describe('normalizeConfig new fields', () => {
+  it('defaults modelSort to custom, modelOrder to [], recentlyUsed to {}', () => {
+    const config = normalizeConfig(null)
+    expect(config.modelSort).toBe('custom')
+    expect(config.modelOrder).toEqual([])
+    expect(config.recentlyUsed).toEqual({})
+  })
+
+  it('honors explicit sort modes and filters junk', () => {
+    expect(normalizeConfig({ modelSort: 'name' }).modelSort).toBe('name')
+    expect(normalizeConfig({ modelSort: 'recent' }).modelSort).toBe('recent')
+    expect(normalizeConfig({ modelSort: 'bogus' }).modelSort).toBe('custom')
+    expect(normalizeConfig({ modelOrder: ['a', 2, 'b'] }).modelOrder).toEqual(['a', 'b'])
+    expect(normalizeConfig({ recentlyUsed: { a: 1, b: 'x', c: NaN } }).recentlyUsed).toEqual({ a: 1 })
   })
 })
