@@ -1,0 +1,289 @@
+/*
+ * Composer model seat (shadows the host ModelSelect). Styles mirror the host
+ * ModelSelect.module.css exactly (same tokens, sizes and spacing) so the
+ * replacement is visually indistinguishable, plus the provider pane's title
+ * and hint rows.
+ */
+
+.mr-seat-root {
+  min-width: 0;
+  position: relative;
+}
+
+.mr-seat-trigger {
+  min-width: 0;
+  max-width: 220px;
+  height: 28px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 24px;
+  outline: none;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  display: flex;
+}
+
+.mr-seat-trigger:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.mr-seat-trigger:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+.mr-seat-trigger:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+.mr-seat-triggerLabel {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mr-seat-triggerEffort {
+  color: var(--dsw-alias-label-caption);
+  flex: none;
+}
+
+.mr-seat-chevron {
+  color: var(--dsw-alias-label-caption);
+  flex: none;
+  transition: transform 0.12s;
+}
+
+.mr-seat-chevronOpen {
+  transform: rotate(180deg);
+}
+
+.mr-seat-menu {
+  z-index: 20;
+  border: 1px solid var(--dsw-alias-border-inverted);
+  background: var(--dsw-specific-menu);
+  width: min(240px, 100vw - 32px);
+  max-height: min(360px, 100vh - 96px);
+  box-shadow: var(--dsw-shadow-lv3);
+  color: var(--dsw-alias-label-primary);
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  border-radius: 12px;
+  flex-direction: column;
+  padding: 4px;
+  display: flex;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  overflow: hidden;
+}
+
+.mr-seat-status,
+.mr-seat-empty {
+  color: var(--dsw-alias-label-tertiary);
+  padding: 10px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.mr-seat-error,
+.mr-seat-warning {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+  border-radius: 8px;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding: 7px 8px;
+  font-size: 12px;
+  line-height: 18px;
+  display: flex;
+}
+
+.mr-seat-warning {
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.mr-seat-retry {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  flex: none;
+  padding: 0;
+  font-weight: 600;
+}
+
+.mr-seat-groups {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.mr-seat-group + .mr-seat-group {
+  margin-top: 4px;
+}
+
+.mr-seat-groupTitle {
+  z-index: 1;
+  background: var(--dsw-specific-menu);
+  color: var(--dsw-alias-label-tertiary);
+  padding: 5px 8px 3px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  position: sticky;
+  top: 0;
+}
+
+/* Provider pane: non-sticky title row above the provider list. */
+.mr-seat-title {
+  color: var(--dsw-alias-label-tertiary);
+  padding: 5px 8px 3px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.mr-seat-option {
+  width: 100%;
+  min-height: 38px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  outline: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  display: flex;
+}
+
+.mr-seat-option:hover:not(:disabled),
+.mr-seat-option:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.mr-seat-selected {
+  background: transparent;
+}
+
+.mr-seat-option:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+.mr-seat-optionCopy {
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.mr-seat-modelName {
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  overflow: hidden;
+}
+
+.mr-seat-description {
+  color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 18px;
+  overflow: hidden;
+}
+
+.mr-seat-check {
+  color: var(--dsw-alias-label-primary);
+  flex: 0 0 18px;
+  place-items: center;
+  display: grid;
+}
+
+.mr-seat-cell {
+  width: 100%;
+  height: 40px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: 14px;
+  line-height: 22px;
+  display: flex;
+}
+
+.mr-seat-cell:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.mr-seat-cellLabel {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mr-seat-cellValue {
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  flex: 0 auto;
+  overflow: hidden;
+}
+
+.mr-seat-cellChevron {
+  color: var(--dsw-alias-label-tertiary);
+  flex: none;
+}
+
+/* Global hint footer of the provider pane. */
+.mr-seat-hint {
+  color: var(--dsw-alias-label-tertiary);
+  padding: 5px 8px 3px;
+  font-size: 12px;
+  line-height: 18px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  margin-top: 4px;
+}
+
+/*
+ * Mobile portrait: the composer row is an inline-size container. With the
+ * quick route switcher gone from the right tool row, let the model seat
+ * absorb the remaining row width (same rule the old switcher enforced).
+ * The breakpoint matches DSH's own narrow-composer rule (<=460px).
+ */
+@container (width <= 460px) {
+  [data-slot="conversation.input.model"] > * {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  [data-slot="conversation.input.model"] [aria-haspopup="menu"] {
+    width: 100%;
+    max-width: 100%;
+  }
+}

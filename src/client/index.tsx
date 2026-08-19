@@ -1,7 +1,7 @@
 /**
  * @fonlan/dsh-model-router client half: the plugin's own Settings Card
- * (设置 → 插件 → 插件配置 → 模型路由) plus a quick provider switcher beside
- * DSH's composer model selector.
+ * (设置 → 插件 → 插件配置 → 模型路由) plus the model seat that merges the
+ * provider switcher into DSH's composer model picker menu.
  */
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -11,7 +11,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import { LOCALE_NS, zh, en } from './locales'
 import { makeSettingsCard, type SettingsScopeFace } from './settings-card'
-import { registerRouteSwitcher } from './route-switcher'
+import { registerModelRouterSeat } from './model-seat'
 
 /** The settings namespace this card edits (must match the host half). */
 const ROUTER_NS = 'model-router'
@@ -57,5 +57,5 @@ export function apply(ctx: ClientContext): void {
     ),
   )
 
-  registerRouteSwitcher(ctx)
+  registerModelRouterSeat(ctx)
 }

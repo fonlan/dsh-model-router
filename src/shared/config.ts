@@ -84,8 +84,8 @@ export type ModelSortMode = 'custom' | 'name' | 'recent'
 export interface RouterConfigShape {
   models: Record<string, RouterModelConfig>
   /**
-   * Whether the quick route-switcher button is shown beside the composer
-   * model selector (settings → 模型路由 → 显示快速路由切换按钮). Stored
+   * Whether the provider switching entry is shown inside the composer model
+   * picker menu (settings → 模型路由 → 在模型选择菜单中显示提供商切换). Stored
    * globally; absent/unknown documents normalize to `true`.
    */
   showQuickSwitch: boolean
