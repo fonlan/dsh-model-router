@@ -13,6 +13,7 @@ import type {
   LlmModelInfo,
   LlmProviderInfo,
   LlmResolvedModelInfo,
+  PreparedAdapterCall,
   StreamChunk,
 } from '@deepseek-ai/dsh-llm'
 import {
@@ -79,6 +80,27 @@ export function entryRawId(merged: MergedModel, providerId: string): string {
   return merged.providers.find(provider => provider.provider === providerId)?.id ?? merged.id
 }
 
+/** One validated route plus the merged model it was resolved against. */
+export interface BoundRoute {
+  route: ResolvedRoute
+  merged: MergedModel
+}
+
+function unroutable(model: string): LlmError {
+  return new LlmError(`model-router: no provider serves model "${model}"`, 'NO_ADAPTER')
+}
+
+/**
+ * Resolve one model id to its active provider and merged model, rejecting
+ * unadvertised or currently unroutable ids before any provider I/O.
+ */
+export function bindRoute(facts: RouterFacts, modelId: string): BoundRoute {
+  const merged = mergedFor(facts, modelId)
+  const route = merged === null ? null : routeFor(facts, modelId)
+  if (merged === null || route === null) throw unroutable(modelId)
+  return { route, merged }
+}
+
 export class ModelRouterAdapter extends LlmAdapter {
   constructor(private readonly facts: RouterFacts) {
     super()
@@ -108,14 +130,35 @@ export class ModelRouterAdapter extends LlmAdapter {
   }
 
   async resolveModel(_provider: string, model: string, signal?: AbortSignal): Promise<LlmResolvedModelInfo> {
-    const route = routeFor(this.facts, model)
-    const merged = route === null ? null : mergedFor(this.facts, model)
-    if (route === null || merged === null) {
-      throw new LlmError(`model-router: no provider serves model "${model}"`, 'NO_ADAPTER')
+    const { route, merged } = bindRoute(this.facts, model)
+    return this.resolveRoutedIdentity(route, merged, signal)
+  }
+
+  /**
+   * Bind the route generation at preparation time: a provider switch or
+   * catalog refresh between preparation and dispatch cannot combine one
+   * generation's metadata with another's endpoint, matching the host's
+   * one-generation dispatch contract.
+   */
+  async prepareCall(_provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
+    const { route, merged } = bindRoute(this.facts, model)
+    return {
+      model: await this.resolveRoutedIdentity(route, merged, signal),
+      stream: (options: GenerateOptions) => this.streamRouted(options, route, merged),
     }
-    // Delegate with the provider's raw local id (it may carry a vendor/
-    // prefix the real provider needs), then normalize the resolved identity
-    // back to the merged display id so sessions/metering never leak prefixes.
+  }
+
+  async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    const { route, merged } = bindRoute(this.facts, options.model)
+    yield* this.streamRouted(options, route, merged)
+  }
+
+  /**
+   * Delegate with the provider's raw local id (it may carry a vendor/
+   * prefix the real provider needs), then normalize the resolved identity
+   * back to the merged display id so sessions/metering never leak prefixes.
+   */
+  private async resolveRoutedIdentity(route: ResolvedRoute, merged: MergedModel, signal?: AbortSignal): Promise<LlmResolvedModelInfo> {
     const resolved = await this.facts.llm().resolveModelInfo(route.provider, entryRawId(merged, route.provider), signal)
     const display = displayProvider(merged, route.provider)
     return {
@@ -126,12 +169,7 @@ export class ModelRouterAdapter extends LlmAdapter {
     }
   }
 
-  async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-    const route = routeFor(this.facts, options.model)
-    const merged = route === null ? null : mergedFor(this.facts, options.model)
-    if (route === null || merged === null) {
-      throw new LlmError(`model-router: no provider serves model "${options.model}"`, 'NO_ADAPTER')
-    }
+  private async *streamRouted(options: GenerateOptions, route: ResolvedRoute, merged: MergedModel): AsyncIterable<StreamChunk> {
     // Record the use for the recent-use model ordering; never blocks or
     // fails the request (the service debounces persistence).
     try {

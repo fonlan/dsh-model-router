@@ -161,6 +161,47 @@ describe('ModelRouterAdapter.resolveModel', () => {
   })
 })
 
+describe('ModelRouterAdapter.prepareCall', () => {
+  it('retags resolved metadata and dispatches through the provider bound at prepare time', async () => {
+    const cfg: RouterConfigShape = {
+      showQuickSwitch: true,
+      ignoreModelIdPrefix: true,
+      models: { m1: { order: ['a', 'b'], active: 'b' } },
+    }
+    const delegated: GenerateOptions[] = []
+    const llm = {
+      resolveModelInfo: async () => ({
+        provider: 'b',
+        id: 'm1',
+        name: 'm1@b',
+        context: { contextWindow: 64000 },
+      }) as LlmResolvedModelInfo,
+      stream: (options: GenerateOptions) => {
+        delegated.push(options)
+        return (async function * chunks() {
+          yield { type: 'finish', reason: 'stop' } as const
+        })()
+      },
+    } as unknown as LlmRuntime
+    const adapter = new ModelRouterAdapter({ ...facts([merged('m1', 'a', 'b')], cfg), llm: () => llm })
+    const prepared = await adapter.prepareCall('model-router', 'm1')
+    expect(prepared.model.provider).toBe('model-router')
+    expect(prepared.model.id).toBe('m1')
+    expect(prepared.model.context).toEqual({ contextWindow: 64000 })
+    // flip the active provider after preparation; the bound generation still
+    // dispatches through 'b'
+    cfg.models['m1'] = { order: ['a', 'b'], active: 'a' }
+    for await (const _chunk of prepared.stream({ provider: 'model-router', model: 'm1', messages: [] })) { /* drain */ }
+    expect(delegated).toHaveLength(1)
+    expect(delegated[0].provider).toBe('b')
+  })
+
+  it('throws NO_ADAPTER for unserved models', async () => {
+    const adapter = new ModelRouterAdapter(facts([]))
+    await expect(adapter.prepareCall('model-router', 'nope')).rejects.toMatchObject({ code: 'NO_ADAPTER' })
+  })
+})
+
 describe('ModelRouterAdapter.stream', () => {
   it('rewrites the provider and yields the real adapter stream', async () => {
     const calls: string[] = []
