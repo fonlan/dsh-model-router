@@ -5,7 +5,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace, type SettingsScope } from '@deepseek-ai/dsh-settings'
+import type { SettingsScope } from '@deepseek-ai/dsh-settings'
 import type { AdapterRegistrationHandle } from '@deepseek-ai/dsh-llm'
 import {
   initialConfigFor,
@@ -23,7 +23,7 @@ import {
 import { buildCatalog, type RouterCatalog } from './catalog.js'
 import { ModelRouterAdapter, type RouterFacts } from './adapter.js'
 
-export const NS = settingsNamespace(ROUTER_SETTINGS_NS)
+export const NS = ROUTER_SETTINGS_NS
 
 /** Settings document schema: one entry per model id. */
 export const RouterConfigSchema: z<RouterConfigShape> = z.object({

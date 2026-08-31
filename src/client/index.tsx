@@ -3,7 +3,8 @@
  * (设置 → 插件 → 插件配置 → 模型路由) plus the model seat that merges the
  * provider switcher into DSH's composer model picker menu.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context } from '@deepseek-ai/cordis'
+type ClientContext = Context
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'

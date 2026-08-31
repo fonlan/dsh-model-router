@@ -16,13 +16,14 @@
  * mutation controls.
  */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context } from '@deepseek-ai/cordis'
+type ClientContext = Context
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import { LOCALE_NS } from './locales'
 import { api, type ModelRouterState, type ModelSortMode, type RouterModelView } from './api'
 import './settings-card.css'
 
-/** Client settings scope face (subset of @deepseek-ai/dsh-client-runtime). */
+/** Client settings scope face (subset of the app client modules). */
 export interface SettingsScopeFace {
   getSnapshot(): {
     status: 'loading' | 'ready' | 'unavailable'
