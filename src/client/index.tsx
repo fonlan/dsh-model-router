@@ -25,8 +25,11 @@ interface Slots {
   register(def: { name: string; key: string; inject?: () => unknown }, component: unknown): unknown
 }
 
-/** Services required before mounting (provided by the client runtime). */
-export const inject = ['slots', 'locale', 'modelDirectories', 'sessions', 'settingsScope', 'connection', 'remote']
+/** Services required before mounting (provided by the client runtime).
+ *  `remote.session` is included like the host ui-model-selection declares it:
+ *  the seat's `directoryFor` depends on the namespace, which mounts
+ *  asynchronously at startup. */
+export const inject = ['slots', 'locale', 'modelDirectories', 'sessions', 'settingsScope', 'connection', 'remote', 'remote.session']
 
 /** Client plugin body. */
 export function apply(ctx: ClientContext): void {

@@ -41,6 +41,34 @@ interface ModelSelection {
   reasoningEffort?: string
 }
 
+/**
+ * Structural subsets of the host model-catalog wire types (declared locally to
+ * avoid pulling a new peer dependency; identical to the host shapes).
+ */
+interface ModelReasoningEffort {
+  id: string
+  name: string
+  description?: string
+}
+
+interface ModelReasoning {
+  efforts: readonly ModelReasoningEffort[]
+  defaultEffort?: string
+}
+
+interface ModelCatalogModel {
+  id: string
+  name: string
+  description?: string
+  reasoning?: ModelReasoning
+}
+
+interface ModelProviderGroup {
+  id: string
+  name: string
+  models: readonly ModelCatalogModel[]
+}
+
 /** The injected business face of the composer model seat (same share the host ModelSelect receives). */
 interface ModelSeatInjected {
   available: boolean
@@ -192,7 +220,7 @@ export function ModelRouterSeat({
   }, [load, modelId, routeModel, t])
 
   // ---- host ModelSelect logic (faithful copy) ----
-  const choices = useMemo(() => directoryState.groups.flatMap(group => group.models.map(model => ({
+  const choices = useMemo(() => directoryState.groups.flatMap((group: ModelProviderGroup) => group.models.map((model: ModelCatalogModel) => ({
     group,
     model,
     selection: {
@@ -207,14 +235,14 @@ export function ModelRouterSeat({
   const effectiveEffort = current?.reasoningEffort ?? reasoning?.defaultEffort
   const effortLabel = reasoning === undefined ? undefined
     : effectiveEffort === undefined ? t('effortProviderDefault')
-    : reasoning.efforts.find(level => level.id === effectiveEffort)?.name ?? effectiveEffort
+    : reasoning.efforts.find((level: ModelReasoningEffort) => level.id === effectiveEffort)?.name ?? effectiveEffort
   const effortChoices = useMemo<Array<{ key: string; effort: string | undefined; label: string; description?: string }>>(() => reasoning === undefined ? [] : [
     ...(reasoning.defaultEffort === undefined ? [{
       key: 'provider-default',
       effort: undefined as string | undefined,
       label: t('effortProviderDefault'),
     }] : []),
-    ...reasoning.efforts.map(effort => ({
+    ...reasoning.efforts.map((effort: ModelReasoningEffort) => ({
       key: `effort:${effort.id}`,
       effort: effort.id,
       label: effort.name,
@@ -456,7 +484,7 @@ export function ModelRouterSeat({
                       <div className="mr-seat-groupTitle" id={headingId}>
                         {group.name}
                       </div>
-                      {group.models.map(model => {
+                      {group.models.map((model: ModelCatalogModel) => {
                         const selected = current?.provider === group.id && current.model === model.id
                         return (
                           <button
@@ -596,31 +624,125 @@ export function ModelRouterSeat({
   )
 }
 
-/** Register the model seat onto the composer's named model slot (priority -1 shadows the host seat). */
+/** The modelDirectories service face (structural subset of the host service). */
+interface ModelDirectoriesFace {
+  directoryFor(sessionId: SessionId): SessionDirectoryFace
+}
+
+/** The sessions service face (structural subset of the host service). */
+interface SessionsFace {
+  subagentAddress(sessionId: SessionId): unknown
+}
+
+/** One session model directory (structural subset of the host ModelDirectory). */
+interface SessionDirectoryFace {
+  store: SnapshotStore<ModelDirectoryState>
+  load(): Promise<unknown>
+  select(selection: ModelSelection): Promise<unknown>
+}
+
+/** The slots service face (structural subset; the register call is typed `never` below). */
+interface SlotsFace {
+  inject(name: string, callback: () => unknown): unknown
+  register(def: unknown, component: unknown): unknown
+}
+
+/** The scope resolved by the seat's inject block. */
+interface SeatScopeFace {
+  modelDirectories: ModelDirectoriesFace
+  sessions: SessionsFace
+  slots: SlotsFace
+}
+
+const EMPTY_DIRECTORY_STATE: ModelDirectoryState = {
+  current: null,
+  routable: null,
+  groups: [],
+  failures: [],
+  status: 'idle',
+  error: null,
+}
+
+/**
+ * Inert face for the pathological case where the session directory cannot be
+ * resolved even after `remote.session` mounted. The seat renders nothing
+ * (available: false), but crucially the slot entry never throws, so it is
+ * never abdicated and the host seat can keep the cell alive on the next
+ * registration pass.
+ */
+const INERT_DIRECTORY_STORE: SnapshotStore<ModelDirectoryState> = {
+  subscribe: () => () => {},
+  getSnapshot: () => EMPTY_DIRECTORY_STATE,
+  update: () => {},
+  set: () => {},
+}
+
+/**
+ * Build the seat face without ever throwing out of the slot `inject` hook.
+ *
+ * The seat registration below depends on `remote.session` (the namespace is
+ * mounted asynchronously at startup), so by the time this runs the host
+ * `modelDirectories.directoryFor(sessionId)` resolves — the original race is
+ * gone by construction. The try/catch here is belt-and-braces: a throwing
+ * inject would permanently abdicate this slot entry in the renderer
+ * (`reportEntryError` with `abdicate` for single slots), after which the host
+ * seat takes over and the Provider row never appears again.
+ */
+function seatFace(
+  models: ModelDirectoriesFace,
+  sessions: SessionsFace,
+  sessionId: SessionId,
+): ModelSeatInjected {
+  let directory: SessionDirectoryFace | null = null
+  try {
+    directory = models.directoryFor(sessionId)
+  } catch {
+    // unknown session / transient teardown: degrade to the inert face
+  }
+  if (directory === null) {
+    return {
+      available: false,
+      directory: INERT_DIRECTORY_STORE,
+      load: () => {},
+      select: () => Promise.resolve(false),
+    }
+  }
+  let available = true
+  try {
+    available = sessions.subagentAddress(sessionId) === undefined
+  } catch {
+    // sessions face not ready; treat as available
+  }
+  return {
+    available,
+    directory: directory.store,
+    load: () => {
+      if (available) directory?.load().catch(() => {})
+    },
+    select: (selection) =>
+      available ? directory!.select(selection).then(() => true, () => false) : Promise.resolve(false),
+  }
+}
+
+/**
+ * Register the model seat onto the composer's named model slot (priority -1
+ * shadows the host seat). The inject block additionally depends on
+ * `remote.session` so the seat registers only after the remote session
+ * namespace has mounted — `directoryFor` can throw while it is still mounting,
+ * and a throwing inject permanently abdicates the entry (the host seat then
+ * wins and the Provider row never appears).
+ */
 export function registerModelRouterSeat(ctx: ClientContext): void {
   const t = ctx.locale.bind(LOCALE_NS)
-  ctx.inject(['slots', 'modelDirectories'], scope => {
-    const models = scope.modelDirectories
-    const sessions = scope.sessions
-    scope.slots.inject('conversation.input.model', () => scope.slots.register({
+  ctx.inject(['slots', 'modelDirectories', 'remote.session'], scope => {
+    const face = scope as unknown as SeatScopeFace
+    face.slots.inject('conversation.input.model', () => face.slots.register({
       name: 'conversation.input.model',
       id: 'model-router-model-seat',
       priority: -1,
       label: () => t('seatLabel'),
       locale: LOCALE_NS,
-      inject: (sessionId: SessionId) => {
-        const directory = models.directoryFor(sessionId)
-        const available = sessions.subagentAddress(sessionId) === undefined
-        return {
-          available,
-          directory: directory.store,
-          load: () => {
-            if (available) directory.load().catch(() => {})
-          },
-          select: (selection: ModelSelection) =>
-            available ? directory.select(selection).then(() => true, () => false) : Promise.resolve(false),
-        }
-      },
+      inject: (sessionId: SessionId) => seatFace(face.modelDirectories, face.sessions, sessionId),
     } as never, ModelRouterSeat as never))
   })
 }
