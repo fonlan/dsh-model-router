@@ -1,81 +1,41 @@
-/* Model Router settings card — chrome aligned with the built-in plugin cards
-   (设置 → 插件 → 插件配置), theme-consistent via DSW alias variables. */
-.mr-settings-card {
-  border: 1px solid var(--dsw-alias-border-l2, #2a3346);
-  background: var(--dsw-alias-bg-layer-3, #0d1017);
-  border-radius: 12px;
-  list-style: none;
-  transition: border-color .16s, background .16s;
-}
+/* Model Router settings page — the page owns one entry in the settings
+   sidebar and renders its content in the panel's content column. Styles are
+   theme-consistent via DSW alias variables; the page draws its own static
+   header (title plus a one-line summary) over the always-visible controls. */
 
-.mr-settings-card:hover {
-  border-color: var(--dsw-alias-label-dimmed, #4a5468);
-}
+/* page layout */
 
-.mr-settings-card[data-open] {
-  background: var(--dsw-alias-bg-layer-2, #141a26);
-  border-color: var(--dsw-alias-label-dimmed, #4a5468);
-}
-
-.mr-settings-head {
-  appearance: none;
-  width: 100%;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-radius: 12px;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
+.mr-page {
   display: flex;
-}
-
-.mr-settings-head:focus-visible {
-  outline: 2px solid var(--dsw-alias-brand-primary, #4f8cff);
-  outline-offset: -2px;
-}
-
-.mr-settings-head-text {
   flex-direction: column;
-  flex: 1;
-  gap: 4px;
-  min-width: 0;
-  display: flex;
+  gap: 16px;
+  max-width: 720px;
 }
 
-.mr-settings-title {
+.mr-page-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mr-page-title {
+  margin: 0;
   color: var(--dsw-alias-label-primary, #e6e6e6);
   font-size: 15px;
   font-weight: 600;
   line-height: 1.4;
 }
 
-.mr-settings-sub {
+.mr-page-sub {
+  margin: 0;
   color: var(--dsw-alias-label-tertiary, #8b93a7);
   font-size: 13px;
   line-height: 1.5;
 }
 
-.mr-settings-chevron {
-  color: var(--dsw-alias-label-tertiary, #8b93a7);
-  flex: none;
-  transition: transform .16s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+/* body layout */
 
-.mr-settings-chevron[data-open] {
-  transform: rotate(180deg);
-}
-
-.mr-settings-body {
-  border-top: 1px solid var(--dsw-alias-border-l2, #2a3346);
-  margin: 0 16px;
-  padding: 12px 0 8px;
+.mr-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -88,7 +48,7 @@
   line-height: 1.5;
 }
 
-/* ── card body: the router controls ─────────────────────────────────────── */
+/* ── page body: the router controls ─────────────────────────────────────── */
 
 .mr-root {
   display: flex;

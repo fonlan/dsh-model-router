@@ -1,19 +1,19 @@
 /**
- * The Model Router Settings Card (设置 → 插件 → 插件配置 → 模型路由).
+ * The Model Router settings page (设置 → 侧栏「模型路由」).
  *
- * Renders its own expandable chrome aligned with the built-in plugin cards
- * (external plugins cannot import PluginCard): a header naming the plugin and
- * what its settings govern, disclosing the router controls in place. All
- * reads/mutations go through the plugin's fenced API; the server persists
- * through the `model-router` settings namespace, so a switch here is live for
- * the next request globally.
+ * Registers into the settings.section slot, so the page owns one entry in the
+ * settings sidebar and renders its content in the panel's content column. The
+ * page draws its own static header (title plus a one-line summary) over the
+ * router controls: every routed model with its providers, their order and the
+ * provider the model currently routes to. All reads/mutations go through the
+ * plugin's fenced API; the server persists through the `model-router` settings
+ * namespace, so a switch here is live for the next request globally.
  *
  * The bound settings scope (the same `model-router` namespace the host half
- * registers) supplies the card's dispatch state: while the namespace is merely
- * loading the card stays mounted, and when it is unavailable (deployment
- * without the host half) nothing renders — matching the built-in cards. A
- * read-only deployment shows the built-in card's banner and disables the
- * mutation controls.
+ * registers) supplies the page's dispatch state: while the namespace is merely
+ * loading the page stays mounted, and when it is unavailable (deployment
+ * without the host half) nothing renders. A read-only deployment shows the
+ * banner and disables the mutation controls.
  */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
@@ -21,7 +21,7 @@ type ClientContext = Context
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import { LOCALE_NS } from './locales'
 import { api, type ModelRouterState, type ModelSortMode, type RouterModelView } from './api'
-import './settings-card.css'
+import './settings-section.css'
 
 /** Client settings scope face (subset of the app client modules). */
 export interface SettingsScopeFace {
@@ -32,7 +32,7 @@ export interface SettingsScopeFace {
   subscribe(listener: () => void): () => void
 }
 
-export interface SettingsCardProps {
+export interface SettingsSectionProps {
   /** The bound `model-router` settings scope (from the slot entry's inject face). */
   scope: SettingsScopeFace
 }
@@ -65,8 +65,8 @@ function useLocaleRevision(ctx: ClientContext): number {
   return useSyncExternalStore(subscribe, getSnapshot)
 }
 
-export function makeSettingsCard(ctx: ClientContext): (props: SettingsCardProps) => JSX.Element | null {
-  // Bound translation is namespace-typed; the card's props use the plain
+export function makeSettingsSection(ctx: ClientContext): (props: SettingsSectionProps) => JSX.Element | null {
+  // Bound translation is namespace-typed; the page's props use the plain
   // Translate face (string keys), which the dict satisfies structurally.
   const t: Translate = (() => {
     try {
@@ -76,7 +76,7 @@ export function makeSettingsCard(ctx: ClientContext): (props: SettingsCardProps)
     }
   })()
 
-  return function ModelRouterSettingsCard(props: SettingsCardProps): JSX.Element | null {
+  return function ModelRouterSettingsSection(props: SettingsSectionProps): JSX.Element | null {
     const { scope } = props
     // Bind the methods: React invokes getSnapshot/subscribe as bare functions,
     // and SettingsScopeController's methods depend on `this`.
@@ -85,8 +85,6 @@ export function makeSettingsCard(ctx: ClientContext): (props: SettingsCardProps)
       () => scope.getSnapshot(),
     )
     useLocaleRevision(ctx)
-    // Card-local disclosure: collapsed by default, like the built-in plugin cards.
-    const [open, setOpen] = useState(false)
     const [state, setState] = useState<ModelRouterState | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
@@ -216,174 +214,159 @@ export function makeSettingsCard(ctx: ClientContext): (props: SettingsCardProps)
     }, [state, t])
 
     // The namespace is served by the host once the scope is ready. While it is
-    // merely loading, keep the card mounted (the tab already dispatched it);
-    // if it is unavailable (deployment without the host half), render nothing.
+    // merely loading, keep the page mounted (the sidebar already dispatched
+    // it); if it is unavailable (deployment without the host half), render
+    // nothing.
     if (snapshot.status === 'unavailable') return null
     const writable = snapshot.writable
 
     const models = useMemo(() => state?.models ?? [], [state])
 
     return (
-      <li className="mr-settings-card" data-open={open ? '' : undefined}>
-        <button
-          type="button"
-          className="mr-settings-head"
-          aria-expanded={open}
-          aria-label={(open ? t('collapse') : t('expand')) + '：' + t('settingsTitle')}
-          onClick={() => setOpen(!open)}
-        >
-          <span className="mr-settings-head-text">
-            <span className="mr-settings-title">{t('settingsTitle')}</span>
-            <span className="mr-settings-sub">{t('settingsCardDescription')}</span>
-          </span>
-          <span className="mr-settings-chevron" data-open={open ? '' : undefined} aria-hidden="true">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M3.5 5.25L7 8.75L10.5 5.25" stroke="currentColor" strokeWidth="1.5"
-                strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-        </button>
-        {open && (
-          <div className="mr-settings-body">
-            {!writable && (
-              <p className="mr-settings-readonly" role="status">{t('readOnly')}</p>
-            )}
-            <div className="mr-root">
-              <label className="mr-quick-switch">
-                <input
-                  type="checkbox"
-                  checked={state?.showQuickSwitch ?? true}
-                  disabled={loading || quickSwitchBusy || !writable}
-                  onChange={(event) => void toggleQuickSwitch(event.target.checked)}
-                />
-                <span className="mr-quick-switch-copy">
-                  <span className="mr-quick-switch-label">{t('showQuickSwitchLabel')}</span>
-                  <span className="mr-quick-switch-desc">{t('showQuickSwitchDescription')}</span>
-                </span>
-              </label>
-              <label className="mr-quick-switch">
-                <input
-                  type="checkbox"
-                  checked={state?.ignoreModelIdPrefix ?? true}
-                  disabled={loading || ignorePrefixBusy || !writable}
-                  onChange={(event) => void toggleIgnorePrefix(event.target.checked)}
-                />
-                <span className="mr-quick-switch-copy">
-                  <span className="mr-quick-switch-label">{t('ignorePrefixLabel')}</span>
-                  <span className="mr-quick-switch-desc">{t('ignorePrefixDescription')}</span>
-                </span>
-              </label>
-              <div className="mr-sort">
-                <div className="mr-sort-head">
-                  <span className="mr-sort-title">{t('sortTitle')}</span>
-                  <span className="mr-sort-desc">{t('sortDescription')}</span>
-                </div>
-                <div className="mr-sort-modes" role="radiogroup" aria-label={t('sortTitle')}>
-                  {(['custom', 'name', 'recent'] as const).map(mode => (
-                    <label key={mode} className="mr-sort-mode">
-                      <input
-                        type="radio"
-                        name="mr-model-sort"
-                        checked={state?.modelSort === mode}
-                        disabled={loading || sortBusy || !writable}
-                        onChange={() => void changeModelSort(mode)}
-                      />
-                      <span className="mr-sort-mode-copy">
-                        <span className="mr-sort-mode-label">{t(`sortMode${mode[0].toUpperCase()}${mode.slice(1)}`)}</span>
-                        <span className="mr-sort-mode-desc">{t(`sortModeDesc${mode[0].toUpperCase()}${mode.slice(1)}`)}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                {state?.modelSort === 'custom' && (
-                  <div className="mr-sort-custom">
-                    <p className="mr-sort-hint">{t('sortCustomHint')}</p>
-                    <ol className="mr-sort-list">
-                      {models.map((model, index) => {
-                        const dropTarget = modelDrag !== null && modelDrag.index !== index
-                        return (
-                          <li
-                            key={model.id}
-                            className={[
-                              'mr-sort-item',
-                              dropTarget ? 'mr-sort-item-drop' : '',
-                              sortBusy ? 'mr-sort-item-busy' : '',
-                            ].filter(Boolean).join(' ')}
-                            draggable={!sortBusy && writable}
-                            onDragStart={(event) => {
-                              setModelDrag({ index })
-                              event.dataTransfer.effectAllowed = 'move'
-                              try {
-                                event.dataTransfer.setData('text/plain', model.id)
-                              } catch {
-                                // drag data is cosmetic for our own handler
-                              }
-                            }}
-                            onDragOver={(event) => {
-                              if (modelDrag !== null && modelDrag.index !== index) {
-                                event.preventDefault()
-                                event.dataTransfer.dropEffect = 'move'
-                              }
-                            }}
-                            onDrop={(event) => {
-                              if (modelDrag !== null && modelDrag.index !== index) {
-                                event.preventDefault()
-                                moveModel(modelDrag.index, index)
-                              }
-                              setModelDrag(null)
-                            }}
-                            onDragEnd={() => setModelDrag(null)}
-                          >
-                            <span className="mr-grip" aria-hidden="true">⠿</span>
-                            <span className="mr-sort-model-name">{model.name}</span>
-                            <span className="mr-sort-model-id">{model.id}</span>
-                          </li>
-                        )
-                      })}
-                    </ol>
-                  </div>
-                )}
+      <div className="mr-page">
+        <header className="mr-page-head">
+          <h3 className="mr-page-title">{t('settingsTitle')}</h3>
+          <p className="mr-page-sub">{t('sectionSub')}</p>
+        </header>
+        <div className="mr-body">
+          {!writable && (
+            <p className="mr-settings-readonly" role="status">{t('readOnly')}</p>
+          )}
+          <div className="mr-root">
+            <label className="mr-quick-switch">
+              <input
+                type="checkbox"
+                checked={state?.showQuickSwitch ?? true}
+                disabled={loading || quickSwitchBusy || !writable}
+                onChange={(event) => void toggleQuickSwitch(event.target.checked)}
+              />
+              <span className="mr-quick-switch-copy">
+                <span className="mr-quick-switch-label">{t('showQuickSwitchLabel')}</span>
+                <span className="mr-quick-switch-desc">{t('showQuickSwitchDescription')}</span>
+              </span>
+            </label>
+            <label className="mr-quick-switch">
+              <input
+                type="checkbox"
+                checked={state?.ignoreModelIdPrefix ?? true}
+                disabled={loading || ignorePrefixBusy || !writable}
+                onChange={(event) => void toggleIgnorePrefix(event.target.checked)}
+              />
+              <span className="mr-quick-switch-copy">
+                <span className="mr-quick-switch-label">{t('ignorePrefixLabel')}</span>
+                <span className="mr-quick-switch-desc">{t('ignorePrefixDescription')}</span>
+              </span>
+            </label>
+            <div className="mr-sort">
+              <div className="mr-sort-head">
+                <span className="mr-sort-title">{t('sortTitle')}</span>
+                <span className="mr-sort-desc">{t('sortDescription')}</span>
               </div>
-              <div className="mr-toolbar">
-                <span className="mr-count">{t('modelsCount', { count: models.length })}</span>
-                <button type="button" className="mr-button" onClick={() => void load()} disabled={loading}>
-                  {t('refresh')}
-                </button>
-              </div>
-              {error !== null && (
-                <div className="mr-error" role="alert">{error}</div>
-              )}
-              {loading && models.length === 0 && (
-                <div className="mr-empty">{t('loading')}</div>
-              )}
-              {!loading && models.length === 0 && (
-                <div className="mr-empty">{t('empty')}</div>
-              )}
-              <div className="mr-models">
-                {models.map(model => (
-                  <ModelCard
-                    key={model.id}
-                    model={model}
-                    t={t}
-                    readOnly={!writable}
-                    busy={busyModel === model.id}
-                    dragging={drag}
-                    onDragStart={index => setDrag({ modelId: model.id, index })}
-                    onDragEnd={() => setDrag(null)}
-                    onDrop={index => {
-                      if (drag !== null && drag.modelId === model.id) {
-                        void reorder(model, drag.index, index)
-                      }
-                      setDrag(null)
-                    }}
-                    onSwitch={providerId => void switchActive(model, providerId)}
-                  />
+              <div className="mr-sort-modes" role="radiogroup" aria-label={t('sortTitle')}>
+                {(['custom', 'name', 'recent'] as const).map(mode => (
+                  <label key={mode} className="mr-sort-mode">
+                    <input
+                      type="radio"
+                      name="mr-model-sort"
+                      checked={state?.modelSort === mode}
+                      disabled={loading || sortBusy || !writable}
+                      onChange={() => void changeModelSort(mode)}
+                    />
+                    <span className="mr-sort-mode-copy">
+                      <span className="mr-sort-mode-label">{t(`sortMode${mode[0].toUpperCase()}${mode.slice(1)}`)}</span>
+                      <span className="mr-sort-mode-desc">{t(`sortModeDesc${mode[0].toUpperCase()}${mode.slice(1)}`)}</span>
+                    </span>
+                  </label>
                 ))}
               </div>
+              {state?.modelSort === 'custom' && (
+                <div className="mr-sort-custom">
+                  <p className="mr-sort-hint">{t('sortCustomHint')}</p>
+                  <ol className="mr-sort-list">
+                    {models.map((model, index) => {
+                      const dropTarget = modelDrag !== null && modelDrag.index !== index
+                      return (
+                        <li
+                          key={model.id}
+                          className={[
+                            'mr-sort-item',
+                            dropTarget ? 'mr-sort-item-drop' : '',
+                            sortBusy ? 'mr-sort-item-busy' : '',
+                          ].filter(Boolean).join(' ')}
+                          draggable={!sortBusy && writable}
+                          onDragStart={(event) => {
+                            setModelDrag({ index })
+                            event.dataTransfer.effectAllowed = 'move'
+                            try {
+                              event.dataTransfer.setData('text/plain', model.id)
+                            } catch {
+                              // drag data is cosmetic for our own handler
+                            }
+                          }}
+                          onDragOver={(event) => {
+                            if (modelDrag !== null && modelDrag.index !== index) {
+                              event.preventDefault()
+                              event.dataTransfer.dropEffect = 'move'
+                            }
+                          }}
+                          onDrop={(event) => {
+                            if (modelDrag !== null && modelDrag.index !== index) {
+                              event.preventDefault()
+                              moveModel(modelDrag.index, index)
+                            }
+                            setModelDrag(null)
+                          }}
+                          onDragEnd={() => setModelDrag(null)}
+                        >
+                          <span className="mr-grip" aria-hidden="true">⠿</span>
+                          <span className="mr-sort-model-name">{model.name}</span>
+                          <span className="mr-sort-model-id">{model.id}</span>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                </div>
+              )}
+            </div>
+            <div className="mr-toolbar">
+              <span className="mr-count">{t('modelsCount', { count: models.length })}</span>
+              <button type="button" className="mr-button" onClick={() => void load()} disabled={loading}>
+                {t('refresh')}
+              </button>
+            </div>
+            {error !== null && (
+              <div className="mr-error" role="alert">{error}</div>
+            )}
+            {loading && models.length === 0 && (
+              <div className="mr-empty">{t('loading')}</div>
+            )}
+            {!loading && models.length === 0 && (
+              <div className="mr-empty">{t('empty')}</div>
+            )}
+            <div className="mr-models">
+              {models.map(model => (
+                <ModelCard
+                  key={model.id}
+                  model={model}
+                  t={t}
+                  readOnly={!writable}
+                  busy={busyModel === model.id}
+                  dragging={drag}
+                  onDragStart={index => setDrag({ modelId: model.id, index })}
+                  onDragEnd={() => setDrag(null)}
+                  onDrop={index => {
+                    if (drag !== null && drag.modelId === model.id) {
+                      void reorder(model, drag.index, index)
+                    }
+                    setDrag(null)
+                  }}
+                  onSwitch={providerId => void switchActive(model, providerId)}
+                />
+              ))}
             </div>
           </div>
-        )}
-      </li>
+        </div>
+      </div>
     )
   }
 }

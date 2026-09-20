@@ -6,9 +6,7 @@ export const LOCALE_NS = 'model-router'
 
 export const zh = {
   settingsTitle: '模型路由',
-  settingsCardDescription: '模型聚合、提供商切换与优先级顺序',
-  expand: '展开',
-  collapse: '收起',
+  sectionSub: '模型聚合、提供商切换与优先级顺序',
   readOnly: '本部署的设置为只读。',
   loading: '加载中…',
   loadFailed: '加载失败：{message}',
@@ -58,11 +56,9 @@ export const zh = {
   sortFailed: '排序设置失败：{message}',
 }
 
-export const en = {
+export const en: Record<keyof typeof zh, string> = {
   settingsTitle: 'Model Router',
-  settingsCardDescription: 'Model aggregation, provider switching and preference order',
-  expand: 'Expand',
-  collapse: 'Collapse',
+  sectionSub: 'Model aggregation, provider switching and preference order',
   readOnly: 'This deployment stores settings read-only.',
   loading: 'Loading…',
   loadFailed: 'Load failed: {message}',
