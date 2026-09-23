@@ -5,7 +5,6 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import type { SettingsScope } from '@deepseek-ai/dsh-settings'
 import type { AdapterRegistrationHandle } from '@deepseek-ai/dsh-llm'
 import {
   initialConfigFor,
@@ -25,32 +24,40 @@ import { ModelRouterAdapter, type RouterFacts } from './adapter.js'
 
 export const NS = ROUTER_SETTINGS_NS
 
+/**
+ * The slice of the host settings service this plugin writes through. dsh >=
+ * 0.1.7 owns plugin configuration as entry config (the plugin's `Config`
+ * schema), so the router reads the document it was applied with and persists
+ * updates via `settings.replace`, which writes the profile patch.
+ */
+export interface SettingsReplaceFace {
+  replace(ns: string, section: object, expectedRevision?: number): Promise<void>
+}
+
 /** Settings document schema: one entry per model id. */
 export const RouterConfigSchema: z<RouterConfigShape> = z.object({
+  // Volatile marks what the settings plane may write: the settings page and
+  // settings.replace both refuse non-volatile fields.
   models: z.dict(z.object({
     order: z.array(z.string()),
     active: z.string(),
-  })),
+  })).volatile(),
   // Older documents predate the toggles; normalizeConfig defaults both on.
   // Schemastery object keys are input-optional, so absent is valid here.
-  showQuickSwitch: z.boolean(),
-  ignoreModelIdPrefix: z.boolean(),
-  modelSort: z.union([z.const('custom'), z.const('name'), z.const('recent')]),
-  modelOrder: z.array(z.string()),
-  recentlyUsed: z.dict(z.number()),
+  showQuickSwitch: z.boolean().volatile(),
+  ignoreModelIdPrefix: z.boolean().volatile(),
+  modelSort: z.union([z.const('custom'), z.const('name'), z.const('recent')]).volatile(),
+  modelOrder: z.array(z.string()).volatile(),
+  recentlyUsed: z.dict(z.number()).volatile(),
 })
-
-const EMPTY_CONFIG: RouterConfigShape = {
-  models: {},
-  showQuickSwitch: true,
-  ignoreModelIdPrefix: true,
-  modelSort: 'custom',
-  modelOrder: [],
-  recentlyUsed: {},
-}
 
 /** The settings-page state view served by the API. */
 export interface ModelRouterState {
+  /**
+   * Whether this deployment can persist configuration. False (a profile
+   * without the host settings service) makes the page render read-only.
+   */
+  writable: boolean
   /** Whether provider switching is shown inside the composer model picker menu. */
   showQuickSwitch: boolean
   /** Whether model ids are matched with their leading vendor/ prefix ignored. */
@@ -83,28 +90,38 @@ export class ModelRouterService implements RouterFacts {
   }
   private inflight: Promise<RouterCatalog> | null = null
   private cachedAt = 0
-  private scope: SettingsScope<RouterConfigShape> | undefined
+  /** Optional host settings service; absent in profiles without one (no persistence). */
+  private settings: SettingsReplaceFace | undefined
+  /** Live config document (seeded from the entry config, updated on write). */
+  private configDoc: RouterConfigShape
   private registration: AdapterRegistrationHandle | undefined
 
   /** How long a built catalog is considered fresh before being rebuilt. */
   private readonly catalogTtlMs = 30_000
 
-  /** Debounced recent-use persistence (see noteModelUsed / flushUsage). */
-  private readonly usageFlushMs = 1_500
+  /**
+   * Debounced recent-use persistence (see noteModelUsed / flushUsage). Kept
+   * long on purpose: every persist writes the entry config, which restarts
+   * this plugin's entry, so usage bookkeeping must not stream live traffic.
+   */
+  private readonly usageFlushMs = 60_000
   private usageDebounce: ReturnType<typeof setTimeout> | null = null
   private pendingUsage: Record<string, number> = {}
   private usageFlushRunning = false
 
-  constructor(ctx: Context) {
+  constructor(ctx: Context, config: RouterConfigShape) {
     this.ctx = ctx
+    this.configDoc = normalizeConfig(config)
   }
 
-  /** Register settings + adapter and wire topology listeners. */
+  /** Register the settings seam + adapter and wire topology listeners. */
   start(): void {
     // Optional settings service: without one the router still routes
-    // (config falls back to catalog order) but cannot persist.
+    // (config falls back to catalog order) but cannot persist. The service's
+    // shape is only used through SettingsReplaceFace; there is no namespace
+    // registration to make on dsh >= 0.1.7.
     this.ctx.inject(['settings'], (sctx) => {
-      this.scope = sctx.settings.register(NS, RouterConfigSchema) as SettingsScope<RouterConfigShape>
+      this.settings = (sctx as unknown as { settings?: SettingsReplaceFace }).settings
     })
 
     const adapter = new ModelRouterAdapter(this)
@@ -121,14 +138,17 @@ export class ModelRouterService implements RouterFacts {
   }
 
   stop(): void {
-    // Flush any pending recent-use writes before the scope is torn down.
+    // Drop pending recent-use bookkeeping instead of flushing it: on dsh >=
+    // 0.1.7 every persist is an entry-config write, which reloads this plugin
+    // (teardown included), so writing from stop() would re-enter the loader
+    // while it is tearing this very entry down. The timestamps are best-effort
+    // ordering hints for the `recent` display mode, so losing the last
+    // debounce window is harmless.
     if (this.usageDebounce !== null) {
       clearTimeout(this.usageDebounce)
       this.usageDebounce = null
     }
-    if (Object.keys(this.pendingUsage).length > 0) {
-      void this.flushUsage()
-    }
+    this.pendingUsage = {}
     this.registration?.()
     this.registration = undefined
   }
@@ -140,12 +160,7 @@ export class ModelRouterService implements RouterFacts {
   }
 
   config(): RouterConfigShape {
-    if (this.scope === undefined) return EMPTY_CONFIG
-    try {
-      return normalizeConfig(this.scope.get())
-    } catch {
-      return EMPTY_CONFIG
-    }
+    return this.configDoc
   }
 
   providerNames(): ReadonlyMap<string, string> {
@@ -163,7 +178,7 @@ export class ModelRouterService implements RouterFacts {
    * write.
    */
   noteModelUsed(modelId: string): void {
-    if (this.scope === undefined) return
+    if (this.settings === undefined) return
     this.pendingUsage[modelId] = Date.now()
     if (this.usageDebounce !== null) return
     this.usageDebounce = setTimeout(() => {
@@ -179,9 +194,9 @@ export class ModelRouterService implements RouterFacts {
     const pending = this.pendingUsage
     this.pendingUsage = {}
     try {
-      if (this.scope === undefined || Object.keys(pending).length === 0) return
+      if (this.settings === undefined || Object.keys(pending).length === 0) return
       const current = this.config()
-      await this.scope.replace({
+      await this.writeConfig({
         ...current,
         recentlyUsed: { ...current.recentlyUsed, ...pending },
       })
@@ -233,12 +248,12 @@ export class ModelRouterService implements RouterFacts {
   /** Refresh (forced), then persist any config drift (migration, new/vanished models). */
   async refreshAndReconcile(): Promise<void> {
     const catalog = await this.refreshCatalog(true)
-    if (this.scope === undefined) return
+    if (this.settings === undefined) return
     const current = this.config()
     const { models, modelOrder, changed } = reconcileConfig(current, catalog.models)
     if (!changed) return
     try {
-      await this.scope.replace({
+      await this.writeConfig({
         ...current,
         models,
         ...(modelOrder === undefined ? {} : { modelOrder }),
@@ -264,6 +279,7 @@ export class ModelRouterService implements RouterFacts {
     const names = catalog.providerNames
     const creds = catalog.credentialConfigured
     return {
+      writable: this.settings !== undefined,
       showQuickSwitch: config.showQuickSwitch,
       ignoreModelIdPrefix: config.ignoreModelIdPrefix,
       modelSort: config.modelSort,
@@ -319,12 +335,9 @@ export class ModelRouterService implements RouterFacts {
 
   /** Toggle the composer quick route-switcher button (global, persisted). */
   async setShowQuickSwitch(value: boolean): Promise<void> {
-    if (this.scope === undefined) {
-      throw new Error('model-router: settings service is not available in this profile')
-    }
     const current = this.config()
     if (current.showQuickSwitch === value) return
-    await this.scope.replace({ ...current, showQuickSwitch: value })
+    await this.writeConfig({ ...current, showQuickSwitch: value })
   }
 
   /**
@@ -334,23 +347,17 @@ export class ModelRouterService implements RouterFacts {
    * turning on; split models re-initialize when turning off).
    */
   async setIgnoreModelIdPrefix(value: boolean): Promise<void> {
-    if (this.scope === undefined) {
-      throw new Error('model-router: settings service is not available in this profile')
-    }
     const current = this.config()
     if (current.ignoreModelIdPrefix === value) return
-    await this.scope.replace({ ...current, ignoreModelIdPrefix: value })
+    await this.writeConfig({ ...current, ignoreModelIdPrefix: value })
     await this.refreshAndReconcile()
   }
 
   /** Switch the model-list display order mode (global, persisted). */
   async setModelSort(mode: ModelSortMode): Promise<void> {
-    if (this.scope === undefined) {
-      throw new Error('model-router: settings service is not available in this profile')
-    }
     const current = this.config()
     if (current.modelSort === mode) return
-    await this.scope.replace({ ...current, modelSort: mode })
+    await this.writeConfig({ ...current, modelSort: mode })
   }
 
   /**
@@ -359,9 +366,6 @@ export class ModelRouterService implements RouterFacts {
    * always covers the live catalog.
    */
   async setModelOrder(order: string[]): Promise<void> {
-    if (this.scope === undefined) {
-      throw new Error('model-router: settings service is not available in this profile')
-    }
     await this.refreshCatalog()
     const ids = new Set(this.cached.models.map(model => model.id))
     const clean = order.filter(id => ids.has(id))
@@ -372,14 +376,20 @@ export class ModelRouterService implements RouterFacts {
     const sameOrder = clean.length === current.modelOrder.length
       && clean.every((id, at) => id === current.modelOrder[at])
     if (sameOrder) return
-    await this.scope.replace({ ...current, modelOrder: clean })
+    await this.writeConfig({ ...current, modelOrder: clean })
+  }
+
+  /** Write the document through the host settings service (entry config). */
+  private async writeConfig(next: RouterConfigShape): Promise<void> {
+    if (this.settings === undefined) {
+      throw new Error('model-router: settings service is not available in this profile')
+    }
+    await this.settings.replace(NS, next, undefined)
+    this.configDoc = normalizeConfig(next)
   }
 
   private async persist(models: Record<string, { order: string[]; active: string }>): Promise<void> {
-    if (this.scope === undefined) {
-      throw new Error('model-router: settings service is not available in this profile')
-    }
     const current = this.config()
-    await this.scope.replace({ ...current, models })
+    await this.writeConfig({ ...current, models })
   }
 }

@@ -15,15 +15,10 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 type ClientContext = Context
 import type { ModelDirectoryState } from '@deepseek-ai/dsh-client-ui-model-selection/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import {
-  IconCheckOutline16,
-  IconChevronDownOutline14,
-  IconChevronRightOutline14,
-  IconWarningOutline16,
-  Toast,
-} from '@deepseek-ai/dsh-client-ui-primitives'
+import { Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-model-selection/client'
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, WarningIcon } from './icons'
 import { api, type ModelRouterState, type RouterModelView } from './api'
 import { LOCALE_NS } from './locales'
 import './model-seat.css'
@@ -392,7 +387,7 @@ export function ModelRouterSeat({
           <span className="mr-seat-triggerEffort">{effortLabel}</span>
         )}
         <span className={`mr-seat-chevron${open ? ' mr-seat-chevronOpen' : ''}`} aria-hidden>
-          <IconChevronDownOutline14 />
+          <ChevronDownIcon />
         </span>
       </button>
       {open && (
@@ -415,7 +410,7 @@ export function ModelRouterSeat({
                 <span className="mr-seat-cellLabel">{t('menuModel')}</span>
                 <span className="mr-seat-cellValue">{modelLabel}</span>
                 <span className="mr-seat-cellChevron" aria-hidden>
-                  <IconChevronRightOutline14 />
+                  <ChevronRightIcon />
                 </span>
               </button>
               {providerRowVisible && (
@@ -429,7 +424,7 @@ export function ModelRouterSeat({
                   <span className="mr-seat-cellLabel">{t('menuProvider')}</span>
                   <span className="mr-seat-cellValue">{activeProviderName}</span>
                   <span className="mr-seat-cellChevron" aria-hidden>
-                    <IconChevronRightOutline14 />
+                    <ChevronRightIcon />
                   </span>
                 </button>
               )}
@@ -444,7 +439,7 @@ export function ModelRouterSeat({
                   <span className="mr-seat-cellLabel">{t('menuEffort')}</span>
                   <span className="mr-seat-cellValue">{effortLabel}</span>
                   <span className="mr-seat-cellChevron" aria-hidden>
-                    <IconChevronRightOutline14 />
+                    <ChevronRightIcon />
                   </span>
                 </button>
               )}
@@ -505,7 +500,7 @@ export function ModelRouterSeat({
                               )}
                             </span>
                             <span className="mr-seat-check" aria-hidden>
-                              {selected ? <IconCheckOutline16 /> : null}
+                              {selected ? <CheckIcon /> : null}
                             </span>
                           </button>
                         )
@@ -562,7 +557,7 @@ export function ModelRouterSeat({
                             )}
                           </span>
                           <span className="mr-seat-check" aria-hidden>
-                            {selected ? <IconCheckOutline16 /> : null}
+                            {selected ? <CheckIcon /> : null}
                           </span>
                         </button>
                       )
@@ -603,7 +598,7 @@ export function ModelRouterSeat({
                     )}
                   </span>
                   <span className="mr-seat-check" aria-hidden>
-                    {effectiveEffort === level.effort ? <IconCheckOutline16 /> : null}
+                    {effectiveEffort === level.effort ? <CheckIcon /> : null}
                   </span>
                 </button>
               ))}
@@ -615,7 +610,7 @@ export function ModelRouterSeat({
         <Toast
           key={toast.seq}
           text={toast.text}
-          icon={<IconWarningOutline16 />}
+          icon={<WarningIcon />}
           anchor={rootRef.current?.closest('[data-composer-card]') ?? null}
           onDone={() => setToast(null)}
         />

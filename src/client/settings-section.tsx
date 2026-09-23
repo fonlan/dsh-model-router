@@ -6,14 +6,14 @@
  * page draws its own static header (title plus a one-line summary) over the
  * router controls: every routed model with its providers, their order and the
  * provider the model currently routes to. All reads/mutations go through the
- * plugin's fenced API; the server persists through the `model-router` settings
- * namespace, so a switch here is live for the next request globally.
+ * plugin's fenced API; the server persists into this plugin's loader-entry
+ * config (dsh >= 0.1.7), so a switch here is live for the next request
+ * globally.
  *
- * The bound settings scope (the same `model-router` namespace the host half
- * registers) supplies the page's dispatch state: while the namespace is merely
- * loading the page stays mounted, and when it is unavailable (deployment
- * without the host half) nothing renders. A read-only deployment shows the
- * banner and disables the mutation controls.
+ * The page needs no settings service: whether the deployment can persist is
+ * reported by the API itself (`state.writable`), so the page registers and
+ * mounts everywhere the host half serves its API. A read-only deployment
+ * shows the banner and disables the mutation controls.
  */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
@@ -22,20 +22,6 @@ import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import { LOCALE_NS } from './locales'
 import { api, type ModelRouterState, type ModelSortMode, type RouterModelView } from './api'
 import './settings-section.css'
-
-/** Client settings scope face (subset of the app client modules). */
-export interface SettingsScopeFace {
-  getSnapshot(): {
-    status: 'loading' | 'ready' | 'unavailable'
-    writable: boolean
-  }
-  subscribe(listener: () => void): () => void
-}
-
-export interface SettingsSectionProps {
-  /** The bound `model-router` settings scope (from the slot entry's inject face). */
-  scope: SettingsScopeFace
-}
 
 function arrayMove<T>(list: readonly T[], from: number, to: number): T[] {
   const next = [...list]
@@ -65,7 +51,7 @@ function useLocaleRevision(ctx: ClientContext): number {
   return useSyncExternalStore(subscribe, getSnapshot)
 }
 
-export function makeSettingsSection(ctx: ClientContext): (props: SettingsSectionProps) => JSX.Element | null {
+export function makeSettingsSection(ctx: ClientContext): () => JSX.Element {
   // Bound translation is namespace-typed; the page's props use the plain
   // Translate face (string keys), which the dict satisfies structurally.
   const t: Translate = (() => {
@@ -76,14 +62,7 @@ export function makeSettingsSection(ctx: ClientContext): (props: SettingsSection
     }
   })()
 
-  return function ModelRouterSettingsSection(props: SettingsSectionProps): JSX.Element | null {
-    const { scope } = props
-    // Bind the methods: React invokes getSnapshot/subscribe as bare functions,
-    // and SettingsScopeController's methods depend on `this`.
-    const snapshot = useSyncExternalStore(
-      (listener) => scope.subscribe(listener),
-      () => scope.getSnapshot(),
-    )
+  return function ModelRouterSettingsSection(): JSX.Element {
     useLocaleRevision(ctx)
     const [state, setState] = useState<ModelRouterState | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -98,7 +77,8 @@ export function makeSettingsSection(ctx: ClientContext): (props: SettingsSection
     const load = useCallback(async () => {
       setLoading(true)
       try {
-        setState(await api.state())
+        const next = await api.state()
+        setState(next)
         setError(null)
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause))
@@ -213,12 +193,11 @@ export function makeSettingsSection(ctx: ClientContext): (props: SettingsSection
       }
     }, [state, t])
 
-    // The namespace is served by the host once the scope is ready. While it is
-    // merely loading, keep the page mounted (the sidebar already dispatched
-    // it); if it is unavailable (deployment without the host half), render
-    // nothing.
-    if (snapshot.status === 'unavailable') return null
-    const writable = snapshot.writable
+    // Persistence capability is reported by the host half through the API
+    // itself. A host that predates the field reads as writable: the page must
+    // not block edits (with a wrong "read-only" banner) merely because the
+    // host half and the client bundle are briefly out of step.
+    const writable = state?.writable ?? true
 
     const models = useMemo(() => state?.models ?? [], [state])
 
@@ -229,7 +208,7 @@ export function makeSettingsSection(ctx: ClientContext): (props: SettingsSection
           <p className="mr-page-sub">{t('sectionSub')}</p>
         </header>
         <div className="mr-body">
-          {!writable && (
+          {!loading && state !== null && !writable && (
             <p className="mr-settings-readonly" role="status">{t('readOnly')}</p>
           )}
           <div className="mr-root">

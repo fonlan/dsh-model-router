@@ -3,14 +3,15 @@
  *
  * Registers one `model-router` LLM adapter that aggregates every configured
  * provider and model (strict model-id merge), routes each request to the
- * model's currently active provider by in-process delegation, persists the
- * per-model provider order/active config in the `model-router` settings
- * namespace, and serves the fenced JSON API the web settings page calls.
+ * model's currently active provider by in-process delegation, keeps the
+ * per-model provider order/active config in the entry config of this bundle
+ * (dsh >= 0.1.7: the `Config` schema below is the settings document), and
+ * serves the fenced JSON API the web settings page calls.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
-import { ModelRouterService } from './server/service.js'
+import { ModelRouterService, RouterConfigSchema } from './server/service.js'
 import { registerApiRoutes } from './server/rpc.js'
+import type { RouterConfigShape } from './shared/config.js'
 
 export const name = '@fonlan/dsh-model-router'
 
@@ -20,10 +21,12 @@ export const name = '@fonlan/dsh-model-router'
 // no settings page).
 export const inject = ['llm']
 
-export const Config = z.object({})
+// The entry config IS the router document: the settings plane writes it
+// (settings page / settings.replace) and a changed config restarts this entry.
+export const Config = RouterConfigSchema
 
-export function apply(ctx: Context): void {
-  const service = new ModelRouterService(ctx)
+export function apply(ctx: Context, config: RouterConfigShape): void {
+  const service = new ModelRouterService(ctx, config)
 
   ctx.effect(() => {
     service.start()

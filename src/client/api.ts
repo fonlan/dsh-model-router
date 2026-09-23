@@ -16,6 +16,11 @@ export interface RouterModelView {
 }
 
 export interface ModelRouterState {
+  /**
+   * Whether this deployment can persist router configuration (the host half
+   * found the settings service). False renders the page read-only.
+   */
+  writable: boolean
   /** Whether provider switching is shown inside the composer model picker menu. */
   showQuickSwitch: boolean
   /** Whether model ids are matched with their leading vendor/ prefix ignored. */
