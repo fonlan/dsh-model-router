@@ -463,13 +463,43 @@ export function setOrder(
   return { models: next, changed: true }
 }
 
+/**
+ * Dereference one config field as the loader may hand it over.
+ *
+ * dsh >= 0.1.7 owns plugin configuration as entry config, and every field the
+ * `Config` schema marks `.volatile()` arrives as a stable REFERENCE
+ * (`{ get() }`, schemastery's `Volatile<T>`) instead of a plain value — a
+ * reference serializes to `{}`. Reading such a field raw silently yields
+ * `models: {}`, `modelSort: 'custom'`, an empty `modelOrder` and no
+ * `recentlyUsed`: the stored document is dropped, and the next persist
+ * overwrites it with catalog defaults. Plain values pass through unchanged, so
+ * this is safe for the write paths and for callers that already hold a
+ * resolved document.
+ */
+function derefField<T>(value: T): T {
+  if (value !== null && typeof value === 'object' && typeof (value as { get?: unknown }).get === 'function') {
+    return (value as unknown as { get(): T }).get()
+  }
+  return value
+}
+
+/** Dereference every own field of a config object (per-field volatile refs). */
+export function derefConfig(value: unknown): unknown {
+  const root = derefField(value)
+  if (root === null || typeof root !== 'object' || Array.isArray(root)) return root
+  const out: Record<string, unknown> = {}
+  for (const [key, field] of Object.entries(root as Record<string, unknown>)) out[key] = derefField(field)
+  return out
+}
+
 /** Shape-validate an unknown value as a RouterConfigShape (lenient). */
 export function normalizeConfig(value: unknown): RouterConfigShape {
   const models: Record<string, RouterModelConfig> = {}
-  if (typeof value !== 'object' || value === null) {
+  const source = derefConfig(value)
+  if (typeof source !== 'object' || source === null) {
     return { models, showQuickSwitch: true, ignoreModelIdPrefix: true, modelSort: 'custom', modelOrder: [], recentlyUsed: {} }
   }
-  const root = value as {
+  const root = source as {
     models?: unknown
     showQuickSwitch?: unknown
     ignoreModelIdPrefix?: unknown
