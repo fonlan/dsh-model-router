@@ -7,7 +7,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef, type CredentialProvider } from '@deepseek-ai/dsh-credentials'
-import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
+import type { SettingsDescriptor } from '@deepseek-ai/dsh-settings'
 import { mergeModels, ROUTER_PROVIDER_ID, type MergedModel, type ProviderInfo } from '../shared/config.js'
 
 /** Live router catalog: everything the router can advertise and route to. */
@@ -39,10 +39,21 @@ interface ConfigurableEntry {
   settingsPath: readonly string[]
 }
 
-/** Read the resolved value of another plugin's settings section, if registered. */
+/**
+ * Read the resolved value of another plugin's settings section, if the
+ * settings plane describes it. The descriptor's `ns` is the profile entry id,
+ * so the value is that entry's resolved Config (defaults → composition base →
+ * user layer). `describe()` lists only entries that declare volatile
+ * (form-writable) fields, and redaction is off here because the caller reads a
+ * non-secret field (`apiKeyEnv`). An undescribed section, or an unavailable
+ * settings service, yields undefined.
+ */
 function settingsSection(ctx: Context, ns: string): unknown {
   try {
-    return (ctx.settings as SettingsProvider).get(ns as never)
+    const descriptor: SettingsDescriptor | undefined = ctx.settings
+      .describe({ redactSecrets: false })
+      .find(candidate => candidate.ns === ns)
+    return descriptor?.value
   } catch {
     return undefined
   }

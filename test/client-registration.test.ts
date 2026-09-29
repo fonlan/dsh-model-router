@@ -7,8 +7,19 @@
  * disappeared from Settings. The page must register unconditionally, on a
  * client runtime that offers no settings service at all.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { apply, inject } from '../src/client/index'
+
+/**
+ * The client half imports `@deepseek-ai/dsh-client-ui-primitives` for its atoms
+ * (Toast, icons). As of dsh 0.2.0-rc.1 that package publishes the markdown /
+ * shiki libraries its bundle imports as devDependencies only, so the real
+ * module cannot be loaded in an isolated plugin install (pnpm links no runtime
+ * deps for it); this suite only asserts slot registration, so the atoms are
+ * stubbed exactly like test/icons.test.ts does. `vi.mock` is hoisted above the
+ * imports above, so the stub applies to the whole graph.
+ */
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({}))
 
 interface Registered {
   name: string

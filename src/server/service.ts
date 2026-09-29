@@ -34,8 +34,25 @@ export interface SettingsReplaceFace {
   replace(ns: string, section: object, expectedRevision?: number): Promise<void>
 }
 
-/** Settings document schema: one entry per model id. */
-export const RouterConfigSchema: z<RouterConfigShape> = z.object({
+/**
+ * Settings document schema: one entry per model id.
+ *
+ * Every writable field stays `.volatile()`: the settings plane refuses a
+ * namespace whose form has no volatile field, and `settings.replace` refuses
+ * non-volatile paths. The exported schema is nevertheless ASSERTED to the
+ * plain `z<RouterConfigShape>` (the declared type it had before the
+ * schemastery bump) for two reasons:
+ *  - since schemastery 3.18.3 a `.volatile()` field's output types as
+ *    `Volatile<T>`, so `: z<RouterConfigShape>` no longer *compiles*, while the
+ *    inferred schema type cannot be named in the emitted declarations either
+ *    (TS2742: it would need a pnpm-nested cosmokit type, and `pnpm build` runs
+ *    tsc in declaration mode);
+ *  - the plain shape is what consumers actually observe: the loader hands the
+ *    fields over as live `{ get() }` cells and `normalizeConfig` unwinds them.
+ * The assertion is type-level only — the runtime schema keeps its volatile
+ * markers, which is what the settings plane reads.
+ */
+export const RouterConfigSchema = z.object({
   // Volatile marks what the settings plane may write: the settings page and
   // settings.replace both refuse non-volatile fields.
   models: z.dict(z.object({
@@ -49,7 +66,7 @@ export const RouterConfigSchema: z<RouterConfigShape> = z.object({
   modelSort: z.union([z.const('custom'), z.const('name'), z.const('recent')]).volatile(),
   modelOrder: z.array(z.string()).volatile(),
   recentlyUsed: z.dict(z.number()).volatile(),
-})
+}) as unknown as z<RouterConfigShape>
 
 /** The settings-page state view served by the API. */
 export interface ModelRouterState {

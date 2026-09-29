@@ -649,12 +649,19 @@ interface SeatScopeFace {
   slots: SlotsFace
 }
 
+/**
+ * Idle directory snapshot for the inert seat face. Mirrors the shape the
+ * official `ModelDirectory` store starts from, including `pending` (the
+ * selection an in-flight `select` submitted; null when none) — required by
+ * `ModelDirectoryState` and present in both 0.1.x and 0.2.x.
+ */
 const EMPTY_DIRECTORY_STATE: ModelDirectoryState = {
   current: null,
   routable: null,
   groups: [],
   failures: [],
   status: 'idle',
+  pending: null,
   error: null,
 }
 
